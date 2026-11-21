@@ -10,6 +10,7 @@ import 'dart:math';
 
 import 'cot.dart';
 import 'dessins.dart';
+import 'ennemi.dart';
 import 'graphiques.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
@@ -75,6 +76,8 @@ class _CarteScreenState extends State<CarteScreen> {
   String _pion = '';
   bool _departAuto = false;
   Dessin? _aDeplacer;
+  bool _designation = false;
+  StreamSubscription<Dessin>? _alertes;
   final _pointsTrace = <LatLng>[];
   String _dernierCalque = calqueParDefaut;
 
@@ -83,6 +86,7 @@ class _CarteScreenState extends State<CarteScreen> {
     super.initState();
     _partage.addListener(_rafraichir);
     _partage.chargerDessins();
+    _alertes = _partage.nouveauxEnnemis.listen(_alerteEnnemi);
     _demarrerGeoloc();
     _demarrerPartage();
   }
@@ -90,6 +94,7 @@ class _CarteScreenState extends State<CarteScreen> {
   @override
   void dispose() {
     _suivi?.cancel();
+    _alertes?.cancel();
     _partage.removeListener(_rafraichir);
     _partage.arreter();
     super.dispose();
@@ -199,7 +204,7 @@ class _CarteScreenState extends State<CarteScreen> {
   }
 
   int get _pointsMini => switch (_outil?.forme) {
-        FormeDessin.point || FormeDessin.symbole => 1,
+        FormeDessin.point || FormeDessin.symbole || FormeDessin.ennemi => 1,
         FormeDessin.ligne => 2,
         FormeDessin.zone => 3,
         FormeDessin.mission => _outil!.mission!.pointsMini,
@@ -248,7 +253,52 @@ class _CarteScreenState extends State<CarteScreen> {
     );
   }
 
+  // ----- Désignation d'un ennemi -----
+
+  void _alerteEnnemi(Dessin d) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: Colors.red.shade800,
+      duration: const Duration(seconds: 10),
+      content: Text(
+          'Ennemi signalé par ${d.fiche['observateur'] ?? d.auteurIndicatif}'),
+      action: SnackBarAction(
+        label: 'VOIR',
+        textColor: Colors.white,
+        onPressed: () {
+          _carte.move(d.points.first,
+              _carte.camera.zoom < 15 ? 15 : _carte.camera.zoom);
+          _ouvrirFiche(d);
+        },
+      ),
+    ));
+  }
+
+  Future<void> _signalerEnnemi(LatLng ou) async {
+    setState(() => _designation = false);
+    final fiche =
+        await remplirFicheEnnemi(context, _reglages?.indicatif ?? 'Inconnu');
+    if (fiche == null || !mounted) return;
+    final r = Random.secure();
+    _partage.ajouterDessin(Dessin(
+      uid:
+          'MUFASA-E-${List.generate(10, (_) => r.nextInt(16).toRadixString(16)).join()}',
+      forme: FormeDessin.ennemi,
+      points: [ou],
+      nom: '',
+      couleur: Colors.red.shade700,
+      calque: calqueEnnemis,
+      auteur: _reglages?.uid ?? '',
+      auteurIndicatif: _reglages?.indicatif ?? '',
+      fiche: fiche,
+    ));
+  }
+
   void _toucherCarte(TapPosition tap, LatLng point) {
+    if (_designation) {
+      _signalerEnnemi(point);
+      return;
+    }
     final aDeplacer = _aDeplacer;
     if (aDeplacer != null) {
       _partage.ajouterDessin(aDeplacer.deplace(point, par: aDeplacer.auteur));
@@ -490,6 +540,37 @@ class _CarteScreenState extends State<CarteScreen> {
           ),
           if (!_enTrace)
             Positioned(left: 12, bottom: 24, child: _bandeauPartage()),
+          if (_designation)
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Material(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Touchez la carte là où se trouve l\'ennemi.'),
+                      Wrap(spacing: 8, children: [
+                        if (_maPosition != null)
+                          TextButton(
+                            onPressed: () => _signalerEnnemi(_maPosition!),
+                            child: const Text('Il est sur ma position'),
+                          ),
+                        TextButton(
+                          onPressed: () => setState(() => _designation = false),
+                          child: const Text('Annuler'),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (_aDeplacer != null)
             Positioned(
               top: 12,
@@ -548,6 +629,15 @@ class _CarteScreenState extends State<CarteScreen> {
           : Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                FloatingActionButton.extended(
+                  heroTag: 'ennemi',
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white,
+                  onPressed: () => setState(() => _designation = true),
+                  icon: const Icon(Icons.warning_amber),
+                  label: const Text('Ennemi'),
+                ),
+                const SizedBox(height: 12),
                 FloatingActionButton.small(
                   heroTag: 'dessiner',
                   onPressed: _commencerTrace,

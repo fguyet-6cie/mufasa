@@ -124,7 +124,16 @@ class _Peintre extends CustomPainter {
         case FormeDessin.mission:
           _mission(canvas, d, pts, trait);
         case FormeDessin.symbole:
-          break; // dessiné par CoucheSymboles
+          break; // dessiné par coucheSymboles
+        case FormeDessin.ennemi:
+          final p = pts.first;
+          canvas.drawCircle(p, 11, Paint()..color = Colors.white);
+          canvas.drawCircle(p, 8.5, Paint()..color = Colors.red.shade700);
+          final resume = [d.fiche['volume'], d.fiche['nature']]
+              .where((t) => t != null && t.isNotEmpty && t != 'Inconnu')
+              .join(' ');
+          _etiquette(canvas, p + const Offset(0, 20),
+              resume.isEmpty ? 'ENI' : 'ENI · $resume', d.couleur);
       }
       if (estBrouillon) {
         for (final p in pts) {

@@ -25,7 +25,8 @@ Dessin exemple(String uid,
 
 void main() {
   test('chaque forme de dessin se relit à l\'identique', () {
-    for (final f in FormeDessin.values.where((f) => f != FormeDessin.symbole)) {
+    for (final f in FormeDessin.values
+        .where((f) => f != FormeDessin.symbole && f != FormeDessin.ennemi)) {
       final d = exemple('D-$f',
           forme: f, mission: f == FormeDessin.mission ? 'attaquer' : null);
       final lu = Dessin.depuisXml(d.versXml())!;
@@ -83,5 +84,39 @@ void main() {
     await q.chargerDessins();
     expect(q.dessins['D9']!.laMission!.nom, 'Boucler');
     expect(p.dessins.length, 1);
+  });
+
+  test('un ennemi signalé se relit avec sa fiche et prévient les autres',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final e = Dessin(
+      uid: 'E1',
+      forme: FormeDessin.ennemi,
+      points: const [LatLng(48, 2)],
+      nom: '',
+      couleur: Colors.red,
+      calque: calqueEnnemis,
+      auteur: 'AUTRE',
+      auteurIndicatif: 'BRAVO 2',
+      fiche: const {
+        'volume': '1 groupe',
+        'nature': 'Infanterie',
+        'remarques': 'armes "légères" & RPG',
+        'observateur': 'BRAVO 2',
+      },
+    );
+    final xml = e.versXml();
+    expect(xml, contains('<remarks>'));
+    final lu = Dessin.depuisXml(xml)!;
+    expect(lu.forme, FormeDessin.ennemi);
+    expect(lu.fiche['remarques'], 'armes "légères" & RPG');
+    expect(lu.fiche['volume'], '1 groupe');
+
+    final p = Partage();
+    final alerte = p.nouveauxEnnemis.first;
+    p.recevoir(xml);
+    expect((await alerte).uid, 'E1');
+    expect(p.camarades, isEmpty); // pas pris pour un camarade
+    expect(p.dessins.keys, ['E1']);
   });
 }

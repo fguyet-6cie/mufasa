@@ -31,6 +31,10 @@ class Partage extends ChangeNotifier {
   /// Calques que l'utilisateur a choisi de masquer.
   final calquesMasques = <String>{};
   DateTime _dernierRenvoi = DateTime(2000);
+
+  /// Prévient l'écran quand un camarade signale un nouvel ennemi.
+  final _nouveauxEnnemis = StreamController<Dessin>.broadcast();
+  Stream<Dessin> get nouveauxEnnemis => _nouveauxEnnemis.stream;
   Liaison? _liaison;
   StreamSubscription<String>? _ecoute;
   Timer? _minuterie;
@@ -131,6 +135,11 @@ class Partage extends ChangeNotifier {
         return;
       }
       final connu = dessins[d.uid];
+      if (connu == null &&
+          d.forme == FormeDessin.ennemi &&
+          d.auteur != _reglages?.uid) {
+        _nouveauxEnnemis.add(d);
+      }
       if (connu == null || !connu.heure.isAfter(d.heure)) {
         dessins[d.uid] = d;
         _enregistrerDessins();

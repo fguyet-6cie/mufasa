@@ -249,9 +249,11 @@ enum ActionDessin { supprimer, deplacer }
 Future<ActionDessin?> ficheDessin(BuildContext context, Dessin d) {
   final m = d.laMission;
   final symbole = d.forme == FormeDessin.symbole ? symboleDuCode(d.sidc) : null;
-  final titre = m != null
-      ? '${m.nom}${d.pion.isEmpty ? '' : ' : ${d.pion}'}'
-      : (d.nom.isEmpty ? (symbole?.nom ?? 'Sans nom') : d.nom);
+  final titre = d.forme == FormeDessin.ennemi
+      ? 'Ennemi signalé'
+      : m != null
+          ? '${m.nom}${d.pion.isEmpty ? '' : ' : ${d.pion}'}'
+          : (d.nom.isEmpty ? (symbole?.nom ?? 'Sans nom') : d.nom);
   final heure = d.heure.toLocal();
   final hh =
       '${heure.hour.toString().padLeft(2, '0')}h${heure.minute.toString().padLeft(2, '0')}';
@@ -267,6 +269,18 @@ Future<ActionDessin?> ficheDessin(BuildContext context, Dessin d) {
           children: [
             Text(titre, style: Theme.of(ctx).textTheme.titleLarge),
             if (m != null && d.nom.isNotEmpty) Text(d.nom),
+            if (d.forme == FormeDessin.ennemi)
+              for (final r in rubriquesEnnemi.entries)
+                if ((d.fiche[r.key] ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text.rich(TextSpan(children: [
+                      TextSpan(
+                          text: '${r.value} : ',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      TextSpan(text: d.fiche[r.key]),
+                    ])),
+                  ),
             if (symbole != null)
               Text(
                   '${symbole.nom}${estEnnemi(d.sidc) ? ' (ennemi)' : ' (ami)'}'),

@@ -7,7 +7,7 @@ import 'package:xml/xml.dart';
 
 import 'symboles.dart';
 
-enum FormeDessin { point, ligne, zone, mission, symbole }
+enum FormeDessin { point, ligne, zone, mission, symbole, ennemi }
 
 /// Comment un graphique de mission est tracé.
 enum TraceMission {
@@ -89,6 +89,19 @@ const couleursDessin = <String, Color>{
 };
 
 const calqueParDefaut = 'Général';
+const calqueEnnemis = 'Ennemis signalés';
+
+/// Rubriques de la fiche de désignation d'un ennemi, dans l'ordre d'affichage.
+const rubriquesEnnemi = <String, String>{
+  'volume': 'Volume',
+  'nature': 'Nature',
+  'attitude': 'Attitude',
+  'direction': 'Direction / déplacement',
+  'materiels': 'Matériels / armement',
+  'remarques': 'Remarques',
+  'heure': 'Vu à',
+  'observateur': 'Signalé par',
+};
 
 /// Type CoT d'un ordre de suppression.
 const typeSuppression = 't-x-d-d';
@@ -111,12 +124,16 @@ class Dessin {
   /// Pour un symbole OTAN posé sur la carte : son code SIDC.
   final String sidc;
 
+  /// Pour un ennemi signalé : les informations remplies par l'observateur.
+  final Map<String, String> fiche;
+
   Mission? get laMission => missionParCode(mission);
 
   Dessin({
     this.mission,
     this.pion = '',
     this.sidc = '',
+    this.fiche = const {},
     required this.uid,
     required this.forme,
     required this.points,
@@ -157,6 +174,7 @@ class Dessin {
       mission: mission,
       pion: pion,
       sidc: sidc,
+      fiche: fiche,
     );
   }
 
@@ -165,6 +183,7 @@ class Dessin {
   String get typeCot => switch (forme) {
         FormeDessin.point => 'b-m-p-s-m',
         FormeDessin.symbole => typeCotDuSymbole(sidc),
+        FormeDessin.ennemi => 'a-h-G',
         _ => 'u-d-f',
       };
 
@@ -189,7 +208,17 @@ class Dessin {
           '<point lat="${c.latitude}" lon="${c.longitude}" hae="9999999.0" ')
       ..write('ce="9999999.0" le="9999999.0"/><detail>')
       ..write('<contact callsign="${_e(nom)}"/>');
-    if (forme == FormeDessin.symbole) {
+    if (forme == FormeDessin.ennemi) {
+      for (final e in fiche.entries) {
+        b.write('<__champ cle="${_e(e.key)}" valeur="${_e(e.value)}"/>');
+      }
+      // Résumé lisible par les autres outils compatibles.
+      final resume = [
+        for (final e in rubriquesEnnemi.entries)
+          if ((fiche[e.key] ?? '').isNotEmpty) '${e.value} : ${fiche[e.key]}'
+      ].join(' / ');
+      b.write('<remarks>${_e(resume)}</remarks>');
+    } else if (forme == FormeDessin.symbole) {
       // Code du symbole, lisible par d'autres outils compatibles.
       b.write('<__milsym id="${_e(sidc)}"/>');
     } else if (forme == FormeDessin.point) {
@@ -232,7 +261,11 @@ class Dessin {
       final mufasa = detail.getElement('__mufasa');
       final sidc = mufasa?.getAttribute('sidc') ?? '';
       final estSymbole = sidc.isNotEmpty;
-      if (!estSymbole && !type.startsWith('b-m-p') && type != 'u-d-f') {
+      final estEnnemi = mufasa?.getAttribute('forme') == 'ennemi';
+      if (!estSymbole &&
+          !estEnnemi &&
+          !type.startsWith('b-m-p') &&
+          type != 'u-d-f') {
         return null;
       }
       final nom = detail.getElement('contact')?.getAttribute('callsign') ?? '';
@@ -248,9 +281,13 @@ class Dessin {
       FormeDessin forme;
       List<LatLng> points;
       Color couleur;
-      if (estSymbole || type.startsWith('b-m-p')) {
+      if (estSymbole || estEnnemi || type.startsWith('b-m-p')) {
         final pt = ev.getElement('point')!;
-        forme = estSymbole ? FormeDessin.symbole : FormeDessin.point;
+        forme = estEnnemi
+            ? FormeDessin.ennemi
+            : estSymbole
+                ? FormeDessin.symbole
+                : FormeDessin.point;
         points = [
           LatLng(double.parse(pt.getAttribute('lat')!),
               double.parse(pt.getAttribute('lon')!))
@@ -283,6 +320,11 @@ class Dessin {
             : null,
         pion: mufasa?.getAttribute('pion') ?? '',
         sidc: sidc,
+        fiche: {
+          for (final c in detail.findElements('__champ'))
+            if (c.getAttribute('cle') case final cle?)
+              cle: c.getAttribute('valeur') ?? '',
+        },
         uid: uid,
         forme: forme,
         points: points,
