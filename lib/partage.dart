@@ -1,10 +1,12 @@
-// Partage des positions : envoie la mienne régulièrement et garde la liste
-// des camarades reçus.
+// Partage avec le groupe : envoie ma position régulièrement, garde la liste
+// des camarades reçus, et partage les dessins (calques).
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cot.dart';
+import 'dessins.dart';
 import 'reglages.dart';
 import 'reseau/liaison.dart';
 
@@ -15,7 +17,20 @@ class Partage extends ChangeNotifier {
   /// Un camarade silencieux depuis ce délai disparaît de la carte.
   static const oubli = Duration(minutes: 10);
 
+  /// Mes dessins sont renvoyés à ce rythme, pour ceux qui arrivent en retard.
+  static const renvoiDessins = Duration(seconds: 60);
+
   final camarades = <String, CotEvenement>{};
+
+  /// Tous les dessins connus (les miens et ceux reçus), par uid.
+  final dessins = <String, Dessin>{};
+
+  /// Dessins effacés : on les ignore s'ils reviennent.
+  final _supprimes = <String>{};
+
+  /// Calques que l'utilisateur a choisi de masquer.
+  final calquesMasques = <String>{};
+  DateTime _dernierRenvoi = DateTime(2000);
   Liaison? _liaison;
   StreamSubscription<String>? _ecoute;
   Timer? _minuterie;
@@ -60,8 +75,12 @@ class Partage extends ChangeNotifier {
     _minuterie = Timer.periodic(intervalle, (_) {
       _envoyer();
       _nettoyer();
+      if (DateTime.now().difference(_dernierRenvoi) >= renvoiDessins) {
+        _envoyerMesDessins();
+      }
     });
     _envoyer();
+    _envoyerMesDessins();
     notifyListeners();
   }
 
@@ -99,6 +118,26 @@ class Partage extends ChangeNotifier {
 
   @visibleForTesting
   void recevoir(String xml) {
+    final suppr = Dessin.lireSuppression(xml);
+    if (suppr != null) {
+      _oublierDessin(suppr);
+      return;
+    }
+    final d = Dessin.depuisXml(xml);
+    if (d != null) {
+      if (_supprimes.contains(d.uid)) {
+        // Quelqu'un renvoie un dessin déjà effacé : on lui redit de l'effacer.
+        _liaison?.envoyer(Dessin.suppressionXml(d.uid, _reglages?.uid ?? ''));
+        return;
+      }
+      final connu = dessins[d.uid];
+      if (connu == null || !connu.heure.isAfter(d.heure)) {
+        dessins[d.uid] = d;
+        _enregistrerDessins();
+        notifyListeners();
+      }
+      return;
+    }
     final ev = CotEvenement.depuisXml(xml);
     if (ev == null || ev.uid == _reglages?.uid) return;
     // On ne garde ici que les unités (types « a-… »), pas les autres objets.
@@ -112,5 +151,76 @@ class Partage extends ChangeNotifier {
     final avant = camarades.length;
     camarades.removeWhere((_, ev) => ev.perime.isBefore(limite));
     if (camarades.length != avant) notifyListeners();
+  }
+
+  // ----- Dessins et calques -----
+
+  /// Noms de tous les calques connus, « Général » en premier.
+  List<String> get calques {
+    final noms = {calqueParDefaut, ...dessins.values.map((d) => d.calque)};
+    return [
+      calqueParDefaut,
+      ...(noms..remove(calqueParDefaut)).toList()..sort()
+    ];
+  }
+
+  Iterable<Dessin> get dessinsVisibles =>
+      dessins.values.where((d) => !calquesMasques.contains(d.calque));
+
+  void basculerCalque(String calque, bool visible) {
+    visible ? calquesMasques.remove(calque) : calquesMasques.add(calque);
+    _enregistrerDessins();
+    notifyListeners();
+  }
+
+  void ajouterDessin(Dessin d) {
+    dessins[d.uid] = d;
+    calquesMasques.remove(d.calque);
+    _enregistrerDessins();
+    _liaison?.envoyer(d.versXml());
+    notifyListeners();
+  }
+
+  void supprimerDessin(String uid) {
+    _oublierDessin(uid);
+    _liaison?.envoyer(Dessin.suppressionXml(uid, _reglages?.uid ?? ''));
+  }
+
+  void _oublierDessin(String uid) {
+    _supprimes.add(uid);
+    if (dessins.remove(uid) != null) notifyListeners();
+    _enregistrerDessins();
+  }
+
+  void _envoyerMesDessins() {
+    _dernierRenvoi = DateTime.now();
+    final moi = _reglages?.uid;
+    if (_liaison == null || moi == null) return;
+    for (final d in dessins.values.where((d) => d.auteur == moi)) {
+      _liaison!.envoyer(d.versXml());
+    }
+  }
+
+  /// Recharge les dessins gardés dans le téléphone.
+  Future<void> chargerDessins() async {
+    final p = await SharedPreferences.getInstance();
+    for (final xml in p.getStringList('dessins') ?? const <String>[]) {
+      final d = Dessin.depuisXml(xml);
+      if (d != null) dessins[d.uid] = d;
+    }
+    _supprimes.addAll(p.getStringList('dessinsSupprimes') ?? const []);
+    calquesMasques.addAll(p.getStringList('calquesMasques') ?? const []);
+    notifyListeners();
+  }
+
+  Future<void> _enregistrerDessins() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList(
+        'dessins', [for (final d in dessins.values) d.versXml()]);
+    // On ne garde que les 500 dernières suppressions.
+    final s = _supprimes.toList();
+    await p.setStringList(
+        'dessinsSupprimes', s.length > 500 ? s.sublist(s.length - 500) : s);
+    await p.setStringList('calquesMasques', calquesMasques.toList());
   }
 }

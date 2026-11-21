@@ -6,7 +6,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'dart:math';
+
 import 'cot.dart';
+import 'dessins.dart';
+import 'graphiques.dart';
+import 'outils_dessin.dart';
 import 'partage.dart';
 import 'reglages.dart';
 
@@ -64,10 +69,18 @@ class _CarteScreenState extends State<CarteScreen> {
   final _partage = Partage();
   Reglages? _reglages;
 
+  // Tracé en cours
+  ChoixOutil? _outil;
+  String _pion = '';
+  bool _departAuto = false;
+  final _pointsTrace = <LatLng>[];
+  String _dernierCalque = calqueParDefaut;
+
   @override
   void initState() {
     super.initState();
     _partage.addListener(_rafraichir);
+    _partage.chargerDessins();
     _demarrerGeoloc();
     _demarrerPartage();
   }
@@ -139,6 +152,246 @@ class _CarteScreenState extends State<CarteScreen> {
     }
   }
 
+  // ----- Dessin -----
+
+  bool get _enTrace => _outil != null;
+
+  Future<void> _commencerTrace() async {
+    final outil = await choisirOutil(context);
+    if (outil == null || !mounted) return;
+    var pion = '';
+    final depart = <LatLng>[];
+    final m = outil.mission;
+    if (m != null) {
+      final positions = <String, LatLng>{
+        if (_reglages != null && _maPosition != null)
+          _reglages!.indicatif: _maPosition!,
+        for (final c in _partage.camarades.values)
+          c.indicatif: LatLng(c.lat, c.lon),
+      };
+      final choisi = await choisirPion(context, m, positions.keys.toList());
+      if (choisi == null || !mounted) return;
+      pion = choisi;
+      // Les flèches et secteurs partent du pion, si on connaît sa position.
+      final pos = positions[pion];
+      if (pos != null &&
+          (m.trace == TraceMission.fleche || m.trace == TraceMission.secteur)) {
+        depart.add(pos);
+      }
+    }
+    setState(() {
+      _outil = outil;
+      _pion = pion;
+      _departAuto = depart.isNotEmpty;
+      _pointsTrace
+        ..clear()
+        ..addAll(depart);
+    });
+  }
+
+  int get _pointsMini => switch (_outil?.forme) {
+        FormeDessin.point => 1,
+        FormeDessin.ligne => 2,
+        FormeDessin.zone => 3,
+        FormeDessin.mission => _outil!.mission!.pointsMini,
+        null => 1,
+      };
+
+  int? get _pointsMaxi => switch (_outil?.forme) {
+        FormeDessin.point => 1,
+        FormeDessin.mission => _outil!.mission!.pointsMaxi,
+        _ => null,
+      };
+
+  String get _consigne {
+    final o = _outil!;
+    final m = o.mission;
+    if (m != null && _departAuto && _pointsTrace.isNotEmpty) {
+      return m.trace == TraceMission.secteur
+          ? 'Départ posé sur le pion. Touchez la première limite, puis la seconde.'
+          : 'Départ posé sur le pion. Touchez le chemin jusqu\'à l\'objectif, puis Terminer.';
+    }
+    if (m != null) return m.consigne;
+    return switch (o.forme) {
+      FormeDessin.point => 'Touchez la carte pour placer le point.',
+      FormeDessin.ligne =>
+        'Touchez la carte pour poser les points de la ligne.',
+      _ => 'Touchez la carte pour poser les coins de la zone.',
+    };
+  }
+
+  Dessin? get _brouillon {
+    final o = _outil;
+    if (o == null || _pointsTrace.isEmpty) return null;
+    return Dessin(
+      uid: 'brouillon',
+      forme: o.forme,
+      points: List.of(_pointsTrace),
+      nom: '',
+      couleur: Colors.blue,
+      calque: '',
+      auteur: '',
+      auteurIndicatif: '',
+      mission: o.mission?.code,
+      pion: _pion,
+    );
+  }
+
+  void _toucherCarte(TapPosition tap, LatLng point) {
+    if (_enTrace) {
+      setState(() => _pointsTrace.add(point));
+      final maxi = _pointsMaxi;
+      if (maxi != null && _pointsTrace.length >= maxi) _terminerTrace();
+      return;
+    }
+    final d = dessinTouche(
+        _carte.camera, _partage.dessinsVisibles, tap.relative ?? Offset.zero);
+    if (d != null) _ouvrirFiche(d);
+  }
+
+  Future<void> _ouvrirFiche(Dessin d) async {
+    final supprimer = await ficheDessin(context, d);
+    if (supprimer == true) _partage.supprimerDessin(d.uid);
+  }
+
+  void _abandonnerTrace() => setState(() {
+        _outil = null;
+        _pointsTrace.clear();
+      });
+
+  Future<void> _terminerTrace() async {
+    final o = _outil;
+    if (o == null || _pointsTrace.length < _pointsMini) return;
+    final m = o.mission;
+    final fin = await finaliserDessin(
+      context,
+      titre: m != null
+          ? '${m.nom}${_pion.isEmpty ? '' : ' : $_pion'}'
+          : switch (o.forme) {
+              FormeDessin.point => 'Nouveau point',
+              FormeDessin.ligne => 'Nouvelle ligne',
+              _ => 'Nouvelle zone',
+            },
+      calques: _partage.calques,
+      calqueSuggere: _partage.calques.contains(_dernierCalque)
+          ? _dernierCalque
+          : calqueParDefaut,
+      couleurSuggeree: Colors.blue,
+      nomFacultatif: m != null,
+    );
+    if (!mounted) return;
+    if (fin == null) {
+      _abandonnerTrace();
+      return;
+    }
+    final r = Random.secure();
+    _partage.ajouterDessin(Dessin(
+      uid:
+          'MUFASA-D-${List.generate(10, (_) => r.nextInt(16).toRadixString(16)).join()}',
+      forme: o.forme,
+      points: List.of(_pointsTrace),
+      nom: fin.nom,
+      couleur: fin.couleur,
+      calque: fin.calque,
+      auteur: _reglages?.uid ?? '',
+      auteurIndicatif: _reglages?.indicatif ?? '',
+      mission: m?.code,
+      pion: _pion,
+    ));
+    _dernierCalque = fin.calque;
+    _abandonnerTrace();
+  }
+
+  Future<void> _ouvrirCalques() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, maj) => SafeArea(
+          child: ConstrainedBox(
+            constraints:
+                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text('Fond de carte',
+                      style: Theme.of(ctx).textTheme.titleMedium),
+                ),
+                RadioGroup<FondIgn>(
+                  groupValue: _fond,
+                  onChanged: (f) {
+                    setState(() => _fond = f!);
+                    maj(() {});
+                  },
+                  child: Column(children: [
+                    for (final f in fondsIgn)
+                      RadioListTile<FondIgn>(value: f, title: Text(f.nom)),
+                  ]),
+                ),
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text('Calques',
+                      style: Theme.of(ctx).textTheme.titleMedium),
+                ),
+                for (final c in _partage.calques)
+                  SwitchListTile(
+                    title: Text(c),
+                    subtitle: Text(
+                        '${_partage.dessins.values.where((d) => d.calque == c).length} dessin(s)'),
+                    value: !_partage.calquesMasques.contains(c),
+                    onChanged: (v) {
+                      _partage.basculerCalque(c, v);
+                      maj(() {});
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _barreTrace() {
+    final n = _pointsTrace.length;
+    return Material(
+      elevation: 6,
+      color: Theme.of(context).colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Abandonner',
+                icon: const Icon(Icons.close),
+                onPressed: _abandonnerTrace,
+              ),
+              IconButton(
+                tooltip: 'Retirer le dernier point',
+                icon: const Icon(Icons.undo),
+                onPressed:
+                    n == 0 ? null : () => setState(_pointsTrace.removeLast),
+              ),
+              const Spacer(),
+              Text('$n point(s)'),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: n >= _pointsMini ? _terminerTrace : null,
+                child: const Text('Terminer'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -150,15 +403,10 @@ class _CarteScreenState extends State<CarteScreen> {
             tooltip: 'Réglages',
             onPressed: _ouvrirReglages,
           ),
-          PopupMenuButton<FondIgn>(
+          IconButton(
             icon: const Icon(Icons.layers),
-            tooltip: 'Fond de carte',
-            onSelected: (f) => setState(() => _fond = f),
-            itemBuilder: (_) => [
-              for (final f in fondsIgn)
-                CheckedPopupMenuItem(
-                    value: f, checked: f == _fond, child: Text(f.nom)),
-            ],
+            tooltip: 'Fond de carte et calques',
+            onPressed: _ouvrirCalques,
           ),
         ],
       ),
@@ -166,15 +414,23 @@ class _CarteScreenState extends State<CarteScreen> {
         children: [
           FlutterMap(
             mapController: _carte,
-            options: const MapOptions(
-              initialCenter: LatLng(46.6, 2.4), // centre de la France
+            options: MapOptions(
+              initialCenter: const LatLng(46.6, 2.4), // centre de la France
               initialZoom: 6,
+              onTap: _toucherCarte,
+              // Pas de rotation : le nord reste en haut.
+              interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
             ),
             children: [
               TileLayer(
                 urlTemplate: _fond.url,
                 maxNativeZoom: _fond.zoomMax,
                 userAgentPackageName: 'fr.cie6.mufasa',
+              ),
+              CoucheDessins(
+                dessins: _partage.dessinsVisibles.toList(),
+                brouillon: _brouillon,
               ),
               MarkerLayer(markers: [
                 for (final c in _partage.camarades.values) _marqueurCamarade(c),
@@ -202,7 +458,26 @@ class _CarteScreenState extends State<CarteScreen> {
               ),
             ],
           ),
-          Positioned(left: 12, bottom: 24, child: _bandeauPartage()),
+          if (!_enTrace)
+            Positioned(left: 12, bottom: 24, child: _bandeauPartage()),
+          if (_enTrace)
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Material(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    '${_outil!.mission?.nom ?? ''}${_pion.isEmpty ? '' : ' ($_pion)'}'
+                    '${_outil!.mission == null ? '' : '\n'}$_consigne',
+                  ),
+                ),
+              ),
+            ),
           if (_message != null)
             Positioned(
               top: 12,
@@ -219,11 +494,27 @@ class _CarteScreenState extends State<CarteScreen> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _centrerSurMoi,
-        tooltip: 'Me centrer',
-        child: const Icon(Icons.my_location),
-      ),
+      bottomNavigationBar: _enTrace ? _barreTrace() : null,
+      floatingActionButton: _enTrace
+          ? null
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'dessiner',
+                  onPressed: _commencerTrace,
+                  tooltip: 'Dessiner / mission',
+                  child: const Icon(Icons.edit),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton(
+                  heroTag: 'centrer',
+                  onPressed: _centrerSurMoi,
+                  tooltip: 'Me centrer',
+                  child: const Icon(Icons.my_location),
+                ),
+              ],
+            ),
     );
   }
 
