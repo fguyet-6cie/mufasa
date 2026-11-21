@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cot.dart';
 import 'dessins.dart';
+import 'hierarchie.dart';
 import 'reglages.dart';
 import 'reseau/liaison.dart';
 
@@ -117,6 +118,7 @@ class Partage extends ChangeNotifier {
       lat: _lat!,
       lon: _lon!,
       precision: _precision,
+      place: r.place,
     ).versXml());
   }
 
@@ -160,6 +162,23 @@ class Partage extends ChangeNotifier {
     final avant = camarades.length;
     camarades.removeWhere((_, ev) => ev.perime.isBefore(limite));
     if (camarades.length != avant) notifyListeners();
+  }
+
+  /// Camarades à afficher selon ma place et le niveau de détail choisi.
+  Iterable<CotEvenement> get camaradesVisibles {
+    final r = _reglages;
+    if (r == null) return camarades.values;
+    return camarades.values
+        .where((c) => estVisible(r.place, c.place, r.profondeur));
+  }
+
+  /// Change le niveau de détail affiché (au choix du chef).
+  Future<void> choisirProfondeur(int niveau) async {
+    final r = _reglages;
+    if (r == null) return;
+    r.profondeur = niveau;
+    await r.enregistrer();
+    notifyListeners();
   }
 
   // ----- Dessins et calques -----

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'hierarchie.dart';
+
 /// Attention : l'ordre compte (il est enregistré par numéro). Ajouter à la fin.
 enum ModePartage { aucun, wifi, serveur, relais }
 
@@ -90,8 +92,24 @@ class Reglages {
   String relaisIdentifiant;
   String relaisMotDePasse;
   String codeGroupe;
+  // Place dans la compagnie
+  Fonction fonction;
+  int section, groupe, numEquipe;
+
+  /// Niveau le plus détaillé que je veux voir (1 à 4), au choix du chef.
+  int profondeur;
+
+  Place get place => Place(fonction,
+      section: fonction.aSection ? section : 0,
+      groupe: fonction.aGroupe ? groupe : 0,
+      equipe: fonction.aEquipe ? numEquipe : 0);
 
   Reglages({
+    this.fonction = Fonction.nonRenseignee,
+    this.section = 1,
+    this.groupe = 1,
+    this.numEquipe = 1,
+    this.profondeur = 4,
     required this.uid,
     required this.indicatif,
     required this.equipe,
@@ -140,6 +158,14 @@ class Reglages {
       relaisIdentifiant: p.getString('relaisIdentifiant') ?? '',
       relaisMotDePasse: p.getString('relaisMotDePasse') ?? '',
       codeGroupe: p.getString('codeGroupe') ?? '',
+      fonction: Fonction.values
+              .where((f) => f.name == p.getString('fonction'))
+              .firstOrNull ??
+          Fonction.nonRenseignee,
+      section: p.getInt('section') ?? 1,
+      groupe: p.getInt('groupe') ?? 1,
+      numEquipe: p.getInt('equipeNum') ?? 1,
+      profondeur: p.getInt('profondeur') ?? 4,
     );
   }
 
@@ -155,6 +181,11 @@ class Reglages {
     await p.setString('relaisIdentifiant', relaisIdentifiant);
     await p.setString('relaisMotDePasse', relaisMotDePasse);
     await p.setString('codeGroupe', codeGroupe);
+    await p.setString('fonction', fonction.name);
+    await p.setInt('section', section);
+    await p.setInt('groupe', groupe);
+    await p.setInt('equipeNum', numEquipe);
+    await p.setInt('profondeur', profondeur);
   }
 }
 
@@ -179,6 +210,8 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
   late final _code = TextEditingController(text: r.codeGroupe);
   late String _equipe = r.equipe;
   late ModePartage _mode = r.mode;
+  late Fonction _fonction = r.fonction;
+  late int _section = r.section, _groupe = r.groupe, _equipeNum = r.numEquipe;
   bool _voirAcces = false;
 
   @override
@@ -245,7 +278,11 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       ..relaisPort = int.tryParse(_relaisPort.text.trim()) ?? 8883
       ..relaisIdentifiant = _relaisId.text.trim()
       ..relaisMotDePasse = _relaisMdp.text
-      ..codeGroupe = _code.text.trim();
+      ..codeGroupe = _code.text.trim()
+      ..fonction = _fonction
+      ..section = _section
+      ..groupe = _groupe
+      ..numEquipe = _equipeNum;
     await r.enregistrer();
     if (mounted) Navigator.pop(context, true);
   }
@@ -281,6 +318,31 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
             ],
             onChanged: (v) => setState(() => _equipe = v!),
           ),
+          const SizedBox(height: 24),
+          Text('Ma place dans la compagnie', style: titre),
+          DropdownButtonFormField<Fonction>(
+            initialValue: _fonction,
+            decoration: const InputDecoration(labelText: 'Ma fonction'),
+            items: [
+              for (final f in Fonction.values)
+                DropdownMenuItem(value: f, child: Text(nomsFonctions[f]!)),
+            ],
+            onChanged: (v) => setState(() => _fonction = v!),
+          ),
+          Row(children: [
+            if (_fonction.aSection)
+              Expanded(
+                  child: _numero('Section', _section,
+                      (v) => setState(() => _section = v))),
+            if (_fonction.aGroupe)
+              Expanded(
+                  child: _numero(
+                      'Groupe', _groupe, (v) => setState(() => _groupe = v))),
+            if (_fonction.aEquipe)
+              Expanded(
+                  child: _numero('Équipe', _equipeNum,
+                      (v) => setState(() => _equipeNum = v))),
+          ]),
           const SizedBox(height: 24),
           Text('Partage des positions', style: titre),
           RadioGroup<ModePartage>(
@@ -396,4 +458,18 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       ),
     );
   }
+
+  Widget _numero(String titre, int valeur, ValueChanged<int> changer) =>
+      Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: DropdownButtonFormField<int>(
+          initialValue: valeur,
+          decoration: InputDecoration(labelText: titre),
+          items: [
+            for (var i = 1; i <= 6; i++)
+              DropdownMenuItem(value: i, child: Text('$i')),
+          ],
+          onChanged: (v) => changer(v!),
+        ),
+      );
 }

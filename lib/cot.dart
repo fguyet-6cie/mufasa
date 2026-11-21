@@ -3,6 +3,8 @@
 // d'autres outils compatibles et avec les serveurs TAK open source.
 import 'package:xml/xml.dart';
 
+import 'hierarchie.dart';
+
 class CotEvenement {
   /// Identifiant unique et stable de l'émetteur (un par téléphone).
   final String uid;
@@ -11,6 +13,9 @@ class CotEvenement {
   final String type;
   final String indicatif;
   final String equipe;
+
+  /// Place dans la compagnie (fonction, section, groupe, équipe).
+  final Place place;
   final double lat;
   final double lon;
 
@@ -28,6 +33,7 @@ class CotEvenement {
     required this.lon,
     this.type = 'a-f-G-U-C',
     this.equipe = 'Cyan',
+    this.place = Place.inconnue,
     this.precision = 9999999,
     DateTime? heure,
     DateTime? perime,
@@ -46,8 +52,10 @@ class CotEvenement {
     required double lat,
     required double lon,
     double? precision,
+    Place place = Place.inconnue,
   }) =>
       CotEvenement(
+        place: place,
         uid: uid,
         indicatif: indicatif,
         equipe: equipe,
@@ -69,7 +77,8 @@ class CotEvenement {
         '<point lat="$lat" lon="$lon" hae="9999999.0" '
         'ce="${precision.toStringAsFixed(1)}" le="9999999.0"/>'
         '<detail><contact callsign="${e(indicatif)}"/>'
-        '<__group name="${e(equipe)}" role="Team Member"/>'
+        '<__group name="${e(equipe)}" role="${place.fonction.roleTak}"/>'
+        '<__mufasa ${place.versAttributs()}/>'
         '<takv platform="Mufasa" version="0.2"/></detail></event>';
   }
 
@@ -88,7 +97,11 @@ class CotEvenement {
           detail?.getElement('contact')?.getAttribute('callsign') ?? uid;
       final equipe =
           detail?.getElement('__group')?.getAttribute('name') ?? 'Cyan';
+      final m = detail?.getElement('__mufasa');
       return CotEvenement(
+        place: m == null
+            ? Place.inconnue
+            : Place.depuisAttributs((c) => m.getAttribute(c)),
         uid: uid,
         type: ev.getAttribute('type') ?? 'a-f-G',
         indicatif: indicatif,

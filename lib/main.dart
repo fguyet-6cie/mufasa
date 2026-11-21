@@ -11,6 +11,7 @@ import 'dart:math';
 import 'cot.dart';
 import 'dessins.dart';
 import 'ennemi.dart';
+import 'hierarchie.dart';
 import 'graphiques.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
@@ -173,7 +174,7 @@ class _CarteScreenState extends State<CarteScreen> {
       final positions = <String, LatLng>{
         if (_reglages != null && _maPosition != null)
           _reglages!.indicatif: _maPosition!,
-        for (final c in _partage.camarades.values)
+        for (final c in _partage.camaradesVisibles)
           c.indicatif: LatLng(c.lat, c.lon),
         // Pions amis posés sur la carte (unités nommées).
         for (final d in _partage.dessins.values)
@@ -394,6 +395,29 @@ class _CarteScreenState extends State<CarteScreen> {
             child: ListView(
               shrinkWrap: true,
               children: [
+                if (_reglages != null &&
+                    _reglages!.fonction.niveau >= 0 &&
+                    _reglages!.fonction.niveau < 4) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('Mes subordonnés : afficher jusqu\'aux…',
+                        style: Theme.of(ctx).textTheme.titleMedium),
+                  ),
+                  RadioGroup<int>(
+                    groupValue: _reglages!.profondeur
+                        .clamp(_reglages!.fonction.niveau + 1, 4),
+                    onChanged: (v) async {
+                      await _partage.choisirProfondeur(v!);
+                      maj(() {});
+                    },
+                    child: Column(children: [
+                      for (var n = _reglages!.fonction.niveau + 1; n <= 4; n++)
+                        RadioListTile<int>(
+                            value: n, title: Text(nomsNiveaux[n]!)),
+                    ]),
+                  ),
+                  const Divider(),
+                ],
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text('Fond de carte',
@@ -513,7 +537,8 @@ class _CarteScreenState extends State<CarteScreen> {
               ),
               coucheSymboles(_partage.dessinsVisibles),
               MarkerLayer(markers: [
-                for (final c in _partage.camarades.values) _marqueurCamarade(c),
+                for (final c in _partage.camaradesVisibles)
+                  _marqueurCamarade(c),
               ]),
               if (_maPosition != null)
                 MarkerLayer(markers: [
@@ -658,17 +683,23 @@ class _CarteScreenState extends State<CarteScreen> {
 
   Marker _marqueurCamarade(CotEvenement c) {
     final couleur = c.estPerime ? Colors.grey : couleurEquipe(c.equipe);
+    // Plus le chef est haut placé, plus son carré est grand.
+    final niveau = c.place.fonction.niveau;
+    final cote = niveau < 0 ? 22.0 : 30.0 - 3 * niveau;
+    final hauteur = cote + 22;
+    final abrev = c.place.fonction.abreviation;
     return Marker(
       point: LatLng(c.lat, c.lon),
-      width: 120,
-      height: 52,
-      alignment: Alignment.topCenter,
+      width: 130,
+      height: hauteur,
+      // Le centre du carré tombe sur la position.
+      alignment: Alignment(0, 1 - cote / hauteur),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 22,
-            height: 22,
+            width: cote,
+            height: cote,
             decoration: BoxDecoration(
               color: couleur,
               shape: BoxShape.rectangle,
@@ -684,7 +715,8 @@ class _CarteScreenState extends State<CarteScreen> {
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              c.indicatif,
+              abrev.isEmpty ? c.indicatif : '$abrev ${c.indicatif}',
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
