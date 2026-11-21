@@ -1,7 +1,8 @@
 // Place de chacun dans la compagnie, et qui voit qui.
 // CDU → chefs de section → chefs de groupe → chefs d'équipe → équipiers.
 // Chaque chef voit ses subordonnés (dans sa branche), jusqu'au niveau qu'il
-// choisit. L'équipier voit son équipe.
+// choisit. L'équipier voit tous les amis ; les membres de son trinôme
+// (son équipe) sont mis en évidence.
 
 enum Fonction {
   nonRenseignee,
@@ -107,13 +108,8 @@ bool estVisible(Place moi, Place autre, int profondeur) {
       autre.fonction == Fonction.nonRenseignee) {
     return true;
   }
-  // L'équipier voit les membres de son équipe.
-  if (moi.fonction == Fonction.equipier) {
-    return autre.fonction.niveau >= 3 &&
-        autre.section == moi.section &&
-        autre.groupe == moi.groupe &&
-        autre.equipe == moi.equipe;
-  }
+  // L'équipier voit tous les amis (son trinôme est mis en évidence).
+  if (moi.fonction == Fonction.equipier) return true;
   final n = autre.fonction.niveau;
   if (n <= moi.fonction.niveau || n > profondeur) return false;
   if (moi.fonction.aSection && autre.section != moi.section) return false;
@@ -121,3 +117,11 @@ bool estVisible(Place moi, Place autre, int profondeur) {
   if (moi.fonction.aEquipe && autre.equipe != moi.equipe) return false;
   return true;
 }
+
+/// Les deux font-ils partie du même trinôme (même équipe) ?
+bool memeTrinome(Place moi, Place autre) =>
+    moi.fonction.aEquipe &&
+    autre.fonction.aEquipe &&
+    moi.section == autre.section &&
+    moi.groupe == autre.groupe &&
+    moi.equipe == autre.equipe;

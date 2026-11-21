@@ -172,6 +172,12 @@ class Partage extends ChangeNotifier {
         .where((c) => estVisible(r.place, c.place, r.profondeur));
   }
 
+  /// Ce camarade est-il dans mon trinôme ?
+  bool estDeMonTrinome(CotEvenement c) {
+    final r = _reglages;
+    return r != null && memeTrinome(r.place, c.place);
+  }
+
   /// Change le niveau de détail affiché (au choix du chef).
   Future<void> choisirProfondeur(int niveau) async {
     final r = _reglages;

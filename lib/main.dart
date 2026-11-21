@@ -705,6 +705,8 @@ class _CarteScreenState extends State<CarteScreen> {
     final cote = niveau < 0 ? 22.0 : 30.0 - 3 * niveau;
     final hauteur = cote + 22;
     final abrev = c.place.fonction.abreviation;
+    // Les membres de mon trinôme sont entourés d'or.
+    final trinome = _partage.estDeMonTrinome(c);
     return Marker(
       point: LatLng(c.lat, c.lon),
       width: 130,
@@ -721,14 +723,21 @@ class _CarteScreenState extends State<CarteScreen> {
               color: couleur,
               shape: BoxShape.rectangle,
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.black87, width: 2),
+              border: trinome
+                  ? Border.all(color: Colors.amber.shade600, width: 4)
+                  : Border.all(color: Colors.black87, width: 2),
+              boxShadow: trinome
+                  ? [BoxShadow(color: Colors.amber.shade300, blurRadius: 6)]
+                  : null,
             ),
           ),
           const SizedBox(height: 2),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.85),
+              color: trinome
+                  ? Colors.amber.shade200
+                  : Colors.white.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(

@@ -50,8 +50,11 @@ void main() {
     expect(vus(cde111, 4), [eq111]);
   });
 
-  test('l\'équipier voit son équipe', () {
-    expect(vus(eq111, 4), [cde111]);
+  test('l\'équipier voit tous les amis, et reconnaît son trinôme', () {
+    expect(vus(eq111, 4).length, tous.length - 1);
+    expect(memeTrinome(eq111, cde111), isTrue);
+    expect(memeTrinome(eq111, eq112), isFalse);
+    expect(memeTrinome(eq111, cdg11), isFalse);
   });
 
   test('sans fonction renseignée, on voit tout et on est vu de tous', () {
