@@ -7,9 +7,25 @@ import 'package:flutter/services.dart';
 
 import '../cot.dart';
 import 'liaison.dart';
+import 'liaison_relais_io.dart';
 
 Liaison liaisonWifi() => LiaisonWifi();
 Liaison liaisonServeur(String hote, int port) => LiaisonServeur(hote, port);
+Liaison liaisonRelais({
+  required String hote,
+  required int port,
+  required String identifiant,
+  required String motDePasse,
+  required String codeGroupe,
+  required String uid,
+}) =>
+    LiaisonRelais(
+        hote: hote,
+        port: port,
+        identifiant: identifiant,
+        motDePasse: motDePasse,
+        codeGroupe: codeGroupe,
+        uid: uid);
 
 /// Sans serveur : multidiffusion UDP sur le réseau Wi-Fi local.
 class LiaisonWifi extends Liaison {

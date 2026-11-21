@@ -1,9 +1,10 @@
 // Une « liaison » transporte les messages CoT entre téléphones.
-// Deux modes :
+// Trois modes :
 //  - Wi-Fi local (sans serveur) : tous les téléphones sur le même Wi-Fi ou le
 //    même partage de connexion se parlent directement (multidiffusion UDP).
-//  - Serveur : chaque téléphone se connecte à un serveur TAK (TCP), qui
-//    redistribue les positions à tout le monde, même via la 4G.
+//  - 4G/5G : chaque téléphone passe par une boîte aux lettres en ligne
+//    (MQTT), avec les positions chiffrées par le code de groupe.
+//  - Serveur TAK : connexion TCP à un serveur TAK (pour l'interopérabilité).
 import 'package:flutter/foundation.dart';
 
 import 'liaison_io.dart' if (dart.library.js_interop) 'liaison_web.dart'
@@ -33,3 +34,18 @@ const portServeurParDefaut = 8087;
 Liaison liaisonWifi() => impl.liaisonWifi();
 Liaison liaisonServeur(String hote, int port) =>
     impl.liaisonServeur(hote, port);
+Liaison liaisonRelais({
+  required String hote,
+  required int port,
+  required String identifiant,
+  required String motDePasse,
+  required String codeGroupe,
+  required String uid,
+}) =>
+    impl.liaisonRelais(
+        hote: hote,
+        port: port,
+        identifiant: identifiant,
+        motDePasse: motDePasse,
+        codeGroupe: codeGroupe,
+        uid: uid);

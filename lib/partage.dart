@@ -24,8 +24,12 @@ class Partage extends ChangeNotifier {
 
   Liaison? get liaison => _liaison;
 
+  /// Message à afficher quand le partage ne peut pas démarrer.
+  String? avertissement;
+
   Future<void> demarrer(Reglages r) async {
     await arreter();
+    avertissement = null;
     _reglages = r;
     switch (r.mode) {
       case ModePartage.aucun:
@@ -35,6 +39,20 @@ class Partage extends ChangeNotifier {
       case ModePartage.serveur:
         if (r.hote.isEmpty) return;
         _liaison = liaisonServeur(r.hote, r.port);
+      case ModePartage.relais:
+        if (!r.relaisComplet) {
+          avertissement = '4G/5G : réglages à compléter';
+          notifyListeners();
+          return;
+        }
+        _liaison = liaisonRelais(
+          hote: r.relaisHote,
+          port: r.relaisPort,
+          identifiant: r.relaisIdentifiant,
+          motDePasse: r.relaisMotDePasse,
+          codeGroupe: r.codeGroupe,
+          uid: r.uid,
+        );
     }
     _ecoute = _liaison!.messages.listen(recevoir);
     _liaison!.etat.addListener(notifyListeners);

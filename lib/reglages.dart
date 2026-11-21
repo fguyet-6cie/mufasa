@@ -1,10 +1,13 @@
 // Réglages de l'utilisateur, gardés dans le téléphone.
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum ModePartage { aucun, wifi, serveur }
+/// Attention : l'ordre compte (il est enregistré par numéro). Ajouter à la fin.
+enum ModePartage { aucun, wifi, serveur, relais }
 
 /// Couleurs d'équipe. Le nom anglais est celui qui circule dans les messages
 /// CoT (pour rester compatible), le nom français est affiché.
@@ -21,13 +24,72 @@ const equipes = <String, (String, Color)>{
 
 Color couleurEquipe(String nom) => equipes[nom]?.$2 ?? Colors.cyan;
 
+/// Tout ce qu'il faut pour rejoindre un groupe en 4G/5G, en un seul texte à
+/// envoyer par messagerie : « MUFASA1:… ».
+class Invitation {
+  final String hote;
+  final int port;
+  final String identifiant;
+  final String motDePasse;
+  final String codeGroupe;
+
+  const Invitation({
+    required this.hote,
+    required this.port,
+    required this.identifiant,
+    required this.motDePasse,
+    required this.codeGroupe,
+  });
+
+  static const prefixe = 'MUFASA1:';
+
+  String encoder() =>
+      prefixe +
+      base64Url.encode(utf8.encode(jsonEncode({
+        'h': hote,
+        'p': port,
+        'i': identifiant,
+        'm': motDePasse,
+        'g': codeGroupe,
+      })));
+
+  static Invitation? decoder(String texte) {
+    final t = texte.trim();
+    final debut = t.indexOf(prefixe);
+    if (debut < 0) return null;
+    try {
+      final brut =
+          t.substring(debut + prefixe.length).split(RegExp(r'\s')).first;
+      final j =
+          jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(brut))))
+              as Map<String, dynamic>;
+      return Invitation(
+        hote: j['h'] as String,
+        port: (j['p'] as num).toInt(),
+        identifiant: j['i'] as String,
+        motDePasse: j['m'] as String,
+        codeGroupe: j['g'] as String,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 class Reglages {
   String uid;
   String indicatif;
   String equipe;
   ModePartage mode;
+  // Serveur TAK
   String hote;
   int port;
+  // Boîte aux lettres 4G/5G
+  String relaisHote;
+  int relaisPort;
+  String relaisIdentifiant;
+  String relaisMotDePasse;
+  String codeGroupe;
 
   Reglages({
     required this.uid,
@@ -36,7 +98,26 @@ class Reglages {
     required this.mode,
     required this.hote,
     required this.port,
+    required this.relaisHote,
+    required this.relaisPort,
+    required this.relaisIdentifiant,
+    required this.relaisMotDePasse,
+    required this.codeGroupe,
   });
+
+  bool get relaisComplet =>
+      relaisHote.isNotEmpty &&
+      relaisIdentifiant.isNotEmpty &&
+      relaisMotDePasse.isNotEmpty &&
+      codeGroupe.isNotEmpty;
+
+  Invitation get invitation => Invitation(
+        hote: relaisHote,
+        port: relaisPort,
+        identifiant: relaisIdentifiant,
+        motDePasse: relaisMotDePasse,
+        codeGroupe: codeGroupe,
+      );
 
   static Future<Reglages> charger() async {
     final p = await SharedPreferences.getInstance();
@@ -51,9 +132,14 @@ class Reglages {
       uid: uid,
       indicatif: p.getString('indicatif') ?? 'Sans nom',
       equipe: p.getString('equipe') ?? 'Cyan',
-      mode: ModePartage.values[p.getInt('mode') ?? ModePartage.wifi.index],
+      mode: ModePartage.values[p.getInt('mode') ?? ModePartage.relais.index],
       hote: p.getString('hote') ?? '',
       port: p.getInt('port') ?? 8087,
+      relaisHote: p.getString('relaisHote') ?? '',
+      relaisPort: p.getInt('relaisPort') ?? 8883,
+      relaisIdentifiant: p.getString('relaisIdentifiant') ?? '',
+      relaisMotDePasse: p.getString('relaisMotDePasse') ?? '',
+      codeGroupe: p.getString('codeGroupe') ?? '',
     );
   }
 
@@ -64,6 +150,11 @@ class Reglages {
     await p.setInt('mode', mode.index);
     await p.setString('hote', hote);
     await p.setInt('port', port);
+    await p.setString('relaisHote', relaisHote);
+    await p.setInt('relaisPort', relaisPort);
+    await p.setString('relaisIdentifiant', relaisIdentifiant);
+    await p.setString('relaisMotDePasse', relaisMotDePasse);
+    await p.setString('codeGroupe', codeGroupe);
   }
 }
 
@@ -76,37 +167,92 @@ class ReglagesScreen extends StatefulWidget {
 }
 
 class _ReglagesScreenState extends State<ReglagesScreen> {
-  late final _indicatif = TextEditingController(
-      text: widget.reglages.indicatif == 'Sans nom'
-          ? ''
-          : widget.reglages.indicatif);
-  late final _hote = TextEditingController(text: widget.reglages.hote);
-  late final _port = TextEditingController(text: '${widget.reglages.port}');
-  late String _equipe = widget.reglages.equipe;
-  late ModePartage _mode = widget.reglages.mode;
+  Reglages get r => widget.reglages;
+  late final _indicatif =
+      TextEditingController(text: r.indicatif == 'Sans nom' ? '' : r.indicatif);
+  late final _hote = TextEditingController(text: r.hote);
+  late final _port = TextEditingController(text: '${r.port}');
+  late final _relaisHote = TextEditingController(text: r.relaisHote);
+  late final _relaisPort = TextEditingController(text: '${r.relaisPort}');
+  late final _relaisId = TextEditingController(text: r.relaisIdentifiant);
+  late final _relaisMdp = TextEditingController(text: r.relaisMotDePasse);
+  late final _code = TextEditingController(text: r.codeGroupe);
+  late String _equipe = r.equipe;
+  late ModePartage _mode = r.mode;
+  bool _voirAcces = false;
 
   @override
   void dispose() {
-    _indicatif.dispose();
-    _hote.dispose();
-    _port.dispose();
+    for (final c in [
+      _indicatif,
+      _hote,
+      _port,
+      _relaisHote,
+      _relaisPort,
+      _relaisId,
+      _relaisMdp,
+      _code,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
+  void _info(String texte) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(texte)));
+
+  Future<void> _collerInvitation() async {
+    final presse = await Clipboard.getData(Clipboard.kTextPlain);
+    final inv = Invitation.decoder(presse?.text ?? '');
+    if (inv == null) {
+      _info('Pas d\'invitation Mufasa dans le presse-papiers.');
+      return;
+    }
+    setState(() {
+      _mode = ModePartage.relais;
+      _relaisHote.text = inv.hote;
+      _relaisPort.text = '${inv.port}';
+      _relaisId.text = inv.identifiant;
+      _relaisMdp.text = inv.motDePasse;
+      _code.text = inv.codeGroupe;
+    });
+    _info('Invitation reçue. Appuyez sur Enregistrer.');
+  }
+
+  Future<void> _copierInvitation() async {
+    final inv = Invitation(
+      hote: _relaisHote.text.trim(),
+      port: int.tryParse(_relaisPort.text.trim()) ?? 8883,
+      identifiant: _relaisId.text.trim(),
+      motDePasse: _relaisMdp.text,
+      codeGroupe: _code.text.trim(),
+    );
+    await Clipboard.setData(ClipboardData(
+        text: 'Rejoins le groupe Mufasa : ouvre Mufasa > Réglages > '
+            '« Coller une invitation ».\n${inv.encoder()}'));
+    _info('Invitation copiée. Envoyez-la par messagerie à votre groupe.');
+  }
+
   Future<void> _valider() async {
-    final r = widget.reglages
+    r
       ..indicatif =
           _indicatif.text.trim().isEmpty ? 'Sans nom' : _indicatif.text.trim()
       ..equipe = _equipe
       ..mode = _mode
       ..hote = _hote.text.trim()
-      ..port = int.tryParse(_port.text.trim()) ?? 8087;
+      ..port = int.tryParse(_port.text.trim()) ?? 8087
+      ..relaisHote = _relaisHote.text.trim()
+      ..relaisPort = int.tryParse(_relaisPort.text.trim()) ?? 8883
+      ..relaisIdentifiant = _relaisId.text.trim()
+      ..relaisMotDePasse = _relaisMdp.text
+      ..codeGroupe = _code.text.trim();
     await r.enregistrer();
     if (mounted) Navigator.pop(context, true);
   }
 
   @override
   Widget build(BuildContext context) {
+    final titre = Theme.of(context).textTheme.titleMedium;
     return Scaffold(
       appBar: AppBar(title: const Text('Réglages')),
       body: ListView(
@@ -136,24 +282,27 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
             onChanged: (v) => setState(() => _equipe = v!),
           ),
           const SizedBox(height: 24),
-          Text('Partage des positions',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text('Partage des positions', style: titre),
           RadioGroup<ModePartage>(
             groupValue: _mode,
             onChanged: (v) => setState(() => _mode = v!),
             child: const Column(children: [
               RadioListTile(
+                value: ModePartage.relais,
+                title: Text('4G/5G'),
+                subtitle: Text('Partout où il y a du réseau mobile. '
+                    'Positions chiffrées avec le code de groupe.'),
+              ),
+              RadioListTile(
                 value: ModePartage.wifi,
-                title: Text('Sans serveur (même Wi-Fi)'),
-                subtitle: Text(
-                    'Pour un petit exercice : tous les téléphones sur le même '
+                title: Text('Sans réseau mobile (même Wi-Fi)'),
+                subtitle: Text('Secours : tous les téléphones sur le même '
                     'Wi-Fi ou le même partage de connexion.'),
               ),
               RadioListTile(
                 value: ModePartage.serveur,
-                title: Text('Avec serveur'),
-                subtitle:
-                    Text('Fonctionne aussi en 4G, via le boîtier serveur.'),
+                title: Text('Serveur TAK'),
+                subtitle: Text('Pour se brancher sur un serveur TAK existant.'),
               ),
               RadioListTile(
                 value: ModePartage.aucun,
@@ -161,6 +310,69 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
               ),
             ]),
           ),
+          if (_mode == ModePartage.relais) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _collerInvitation,
+              icon: const Icon(Icons.content_paste),
+              label: const Text('Coller une invitation'),
+            ),
+            TextField(
+              controller: _code,
+              decoration: const InputDecoration(
+                labelText: 'Code de groupe',
+                helperMaxLines: 3,
+                helperText: 'Le même sur tous les téléphones du groupe. '
+                    'Il sert de clé de chiffrement : choisissez-le long.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            ExpansionTile(
+              title: const Text('Accès à la boîte aux lettres'),
+              subtitle: Text(_relaisHote.text.isEmpty
+                  ? 'À remplir une fois (ou via une invitation)'
+                  : _relaisHote.text),
+              tilePadding: EdgeInsets.zero,
+              children: [
+                TextField(
+                  controller: _relaisHote,
+                  decoration: const InputDecoration(
+                      labelText: 'Adresse',
+                      hintText: 'xxxx.s1.eu.hivemq.cloud'),
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                ),
+                TextField(
+                  controller: _relaisPort,
+                  decoration: const InputDecoration(labelText: 'Port'),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: _relaisId,
+                  decoration: const InputDecoration(labelText: 'Identifiant'),
+                  autocorrect: false,
+                ),
+                TextField(
+                  controller: _relaisMdp,
+                  obscureText: !_voirAcces,
+                  decoration: InputDecoration(
+                    labelText: 'Mot de passe',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          _voirAcces ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _voirAcces = !_voirAcces),
+                    ),
+                  ),
+                  autocorrect: false,
+                ),
+              ],
+            ),
+            TextButton.icon(
+              onPressed: _copierInvitation,
+              icon: const Icon(Icons.share),
+              label: const Text('Copier une invitation pour mon groupe'),
+            ),
+          ],
           if (_mode == ModePartage.serveur) ...[
             TextField(
               controller: _hote,
@@ -178,7 +390,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
           const SizedBox(height: 24),
           FilledButton(onPressed: _valider, child: const Text('Enregistrer')),
           const SizedBox(height: 12),
-          Text('Identifiant de ce téléphone : ${widget.reglages.uid}',
+          Text('Identifiant de ce téléphone : ${r.uid}',
               style: Theme.of(context).textTheme.bodySmall),
         ],
       ),

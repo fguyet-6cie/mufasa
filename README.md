@@ -14,8 +14,12 @@ télécharger `mufasa.apk`, puis l'ouvrir pour l'installer (autoriser
 
 Étape 1 (faite) : carte avec fonds IGN (Plan IGN, photos aériennes) et position du téléphone.
 Étape 2 (faite) : partage des positions entre les membres du groupe, au format CoT.
-- Sans serveur : téléphones sur le même Wi-Fi ou partage de connexion (multidiffusion 239.2.3.1:6969).
-- Avec serveur : connexion TCP à un serveur TAK (port 8087 par défaut), fonctionne en 4G.
+- 4G/5G (mode principal) : via une « boîte aux lettres » en ligne (MQTT sur TLS, port 8883,
+  par exemple HiveMQ Cloud gratuit). Les positions sont chiffrées dans le téléphone
+  (AES-256-GCM) avec une clé tirée du code de groupe : l'hébergeur ne peut pas les lire.
+  Les réglages se partagent en un seul texte « invitation » (MUFASA1:…).
+- Sans réseau mobile : téléphones sur le même Wi-Fi ou partage de connexion (multidiffusion 239.2.3.1:6969).
+- Serveur TAK : connexion TCP à un serveur TAK (port 8087 par défaut), pour l'interopérabilité.
 Limite connue : sur iPhone, le mode sans serveur demande une autorisation spéciale d'Apple
 (« multicast entitlement ») ; le mode avec serveur marche sans.
 
@@ -25,7 +29,8 @@ Limite connue : sur iPhone, le mode sans serveur demande une autorisation spéci
 - `lib/reglages.dart` : l'écran réglages (indicatif, équipe, mode de partage).
 - `lib/partage.dart` : envoi de ma position toutes les 10 s, liste des camarades.
 - `lib/cot.dart` : lecture et écriture des messages CoT.
-- `lib/reseau/` : les deux modes de liaison (Wi-Fi local, serveur).
+- `lib/chiffrement.dart` : chiffrement des positions avec le code de groupe.
+- `lib/reseau/` : les modes de liaison (4G/5G, Wi-Fi local, serveur TAK).
 - `test/` : les tests automatiques (`flutter test`).
 - `pubspec.yaml` : la liste des briques utilisées (carte, GPS).
 - `android/` et `ios/` : réglages propres à chaque téléphone (autorisations GPS, nom de l'appli).

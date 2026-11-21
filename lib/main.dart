@@ -272,7 +272,7 @@ class _CarteScreenState extends State<CarteScreen> {
   Widget _bandeauPartage() {
     final l = _partage.liaison;
     final texte = l == null
-        ? 'Partage désactivé'
+        ? (_partage.avertissement ?? 'Partage désactivé')
         : '${l.nom} : ${l.etat.value} · ${_partage.camarades.length} camarade(s)';
     return Material(
       color: Colors.black.withValues(alpha: 0.7),
