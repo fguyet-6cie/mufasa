@@ -13,6 +13,7 @@ import 'cot.dart';
 import 'dessins.dart';
 import 'ennemi.dart';
 import 'hierarchie.dart';
+import 'mise_a_jour.dart';
 import 'graphiques.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
@@ -110,6 +111,8 @@ class _CarteScreenState extends State<CarteScreen> {
     _alertes = _partage.nouveauxEnnemis.listen(_alerteEnnemi);
     _demarrerGeoloc();
     _demarrerPartage();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => proposerMiseAJour(context));
   }
 
   @override
