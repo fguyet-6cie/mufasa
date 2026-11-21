@@ -27,6 +27,13 @@ télécharger `mufasa.apk`, puis l'ouvrir pour l'installer (autoriser
 - Toucher un dessin pour voir qui l'a fait, ou le supprimer pour tout le groupe.
 - Les dessins sont gardés dans le téléphone et renvoyés chaque minute aux retardataires.
 
+Étape 4 (faite) : pions OTAN, ennemis, hiérarchie, lignes et zones.
+- 32 symboles OTAN validés (ami / ennemi, échelons, PC), images générées par outils/gen_symboles.js.
+- Bouton Ennemi : fiche (volume, nature, attitude…) et point rouge chez tous.
+- Vue hiérarchique : chaque chef voit ses subordonnés jusqu'au niveau qu'il choisit.
+- Lignes et zones : limite, LD, PL, itinéraire, axe d'effort, barbelés, objectif,
+  zone de regroupement, champ de mines, secteur de tir.
+
 Limite connue : sur iPhone, le mode sans serveur demande une autorisation spéciale d'Apple
 (« multicast entitlement ») ; le mode avec serveur marche sans.
 

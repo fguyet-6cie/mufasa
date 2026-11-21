@@ -103,6 +103,8 @@ class _Peintre extends CustomPainter {
         case FormeDessin.point:
           _point(canvas, pts.first, d.couleur);
           _etiquette(canvas, pts.first + const Offset(0, 16), d.nom, d.couleur);
+        case FormeDessin.ligne when d.leModele != null && pts.length > 1:
+          _ligneModele(canvas, d, d.leModele!, pts, trait);
         case FormeDessin.ligne:
           if (pts.length > 1) canvas.drawPath(_chemin(pts), trait);
           _etiquette(canvas, _milieu(pts), d.nom, d.couleur);
@@ -118,9 +120,30 @@ class _Peintre extends CustomPainter {
           } else if (pts.length == 2) {
             canvas.drawPath(_chemin(pts), trait);
           }
-          // Nom posé au-dessus du point le plus haut de la zone.
-          final haut = pts.reduce((a, b) => a.dy <= b.dy ? a : b);
-          _etiquette(canvas, haut + const Offset(0, -14), d.nom, d.couleur);
+          final mod = d.leModele;
+          if (mod == null) {
+            // Nom posé au-dessus du point le plus haut de la zone.
+            final haut = pts.reduce((a, b) => a.dy <= b.dy ? a : b);
+            _etiquette(canvas, haut + const Offset(0, -14), d.nom, d.couleur);
+          } else {
+            final centre =
+                pts.fold(Offset.zero, (a, b) => a + b) / pts.length.toDouble();
+            if (mod.code == 'champ_mines') {
+              // Symboles de mines (ronds pleins) au centre de la zone.
+              for (final dx in [-14.0, 0.0, 14.0]) {
+                canvas.drawCircle(
+                    centre + Offset(dx, 0), 5, Paint()..color = d.couleur);
+              }
+              _etiquette(
+                  canvas, centre + const Offset(0, 16), d.nom, d.couleur);
+            } else {
+              _lettre(
+                  canvas,
+                  centre,
+                  [mod.sigle, d.nom].where((t) => t.isNotEmpty).join(' '),
+                  d.couleur);
+            }
+          }
         case FormeDessin.mission:
           _mission(canvas, d, pts, trait);
         case FormeDessin.symbole:
@@ -222,6 +245,109 @@ class _Peintre extends CustomPainter {
         _lettre(canvas, c, m.lettre, d.couleur);
         _etiquette(canvas, c + Offset(0, r * 0.7 + 14), legende, d.couleur);
     }
+  }
+
+  void _ligneModele(
+      Canvas canvas, Dessin d, Modele m, List<Offset> pts, Paint trait) {
+    final texte = [m.sigle, d.nom].where((t) => t.isNotEmpty).join(' ');
+    switch (m.code) {
+      case 'ld' || 'pl':
+        // Ligne pleine, sigle et nom aux deux extrémités.
+        canvas.drawPath(_chemin(pts), trait);
+        _lettre(canvas, pts.first + const Offset(0, -16), texte, d.couleur);
+        _lettre(canvas, pts.last + const Offset(0, -16), texte, d.couleur);
+      case 'limite':
+        // Trait mixte (long-court), nom au milieu.
+        canvas.drawPath(_tirets(_chemin(pts), 18, 6), trait);
+        _etiquette(canvas, _milieu(pts), d.nom, d.couleur);
+      case 'itineraire':
+        canvas.drawPath(_chemin(pts), trait..strokeWidth = 4);
+        _pointe(canvas, pts[pts.length - 2], pts.last, d.couleur);
+        _lettre(canvas, _milieu(pts), texte, d.couleur);
+      case 'axe':
+        // Flèche creuse large (axe d'effort principal).
+        _flecheCreuse(canvas, pts, d.couleur);
+        _etiquette(canvas, _milieu(pts), d.nom, d.couleur);
+      case 'barbeles':
+        canvas.drawPath(_chemin(pts), trait);
+        // Croix régulières le long du réseau.
+        for (final metrique in _chemin(pts).computeMetrics()) {
+          for (var t = 10.0; t < metrique.length; t += 22) {
+            final c = metrique.getTangentForOffset(t)!.position;
+            final croix = trait..strokeWidth = 2;
+            canvas.drawLine(
+                c + const Offset(-5, -5), c + const Offset(5, 5), croix);
+            canvas.drawLine(
+                c + const Offset(-5, 5), c + const Offset(5, -5), croix);
+          }
+        }
+        _etiquette(
+            canvas, _milieu(pts) + const Offset(0, 16), d.nom, d.couleur);
+      case 'secteur_tir':
+        // Depuis l'arme vers les deux limites du secteur, en tirets.
+        final arme = pts[0];
+        for (final limite in pts.skip(1)) {
+          canvas.drawPath(_tirets(_chemin([arme, limite]), 10, 6), trait);
+        }
+        if (pts.length == 3) {
+          final r =
+              math.min((pts[1] - arme).distance, (pts[2] - arme).distance);
+          final a1 = math.atan2((pts[1] - arme).dy, (pts[1] - arme).dx);
+          var a2 = math.atan2((pts[2] - arme).dy, (pts[2] - arme).dx);
+          var balayage = a2 - a1;
+          if (balayage > math.pi) balayage -= 2 * math.pi;
+          if (balayage < -math.pi) balayage += 2 * math.pi;
+          canvas.drawArc(Rect.fromCircle(center: arme, radius: r * 0.9), a1,
+              balayage, false, trait..strokeWidth = 2);
+          final mi = a1 + balayage / 2;
+          _lettre(canvas, arme + Offset(math.cos(mi), math.sin(mi)) * r * 0.6,
+              texte, d.couleur);
+        }
+      default:
+        canvas.drawPath(_chemin(pts), trait);
+        _etiquette(canvas, _milieu(pts), texte, d.couleur);
+    }
+  }
+
+  void _flecheCreuse(Canvas canvas, List<Offset> pts, Color couleur) {
+    const demi = 9.0, tete = 22.0;
+    final contour = Paint()
+      ..color = couleur
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeJoin = StrokeJoin.round;
+    final gauche = <Offset>[], droite = <Offset>[];
+    for (var i = 0; i < pts.length; i++) {
+      final avant = pts[i == 0 ? 0 : i - 1];
+      final apres = pts[i == pts.length - 1 ? i : i + 1];
+      var dir = apres - avant;
+      if (dir.distance < 0.1) dir = const Offset(1, 0);
+      final u = dir / dir.distance;
+      final n = Offset(-u.dy, u.dx);
+      // Le dernier point recule pour laisser la place à la tête.
+      final p = i == pts.length - 1 ? pts[i] - u * tete : pts[i];
+      gauche.add(p + n * demi);
+      droite.add(p - n * demi);
+    }
+    final fin = pts.last;
+    final dir = fin - pts[pts.length - 2];
+    final u = dir / (dir.distance == 0 ? 1 : dir.distance);
+    final n = Offset(-u.dy, u.dx);
+    final base = fin - u * tete;
+    final chemin = Path()..moveTo(droite.first.dx, droite.first.dy);
+    for (final p in gauche.reversed.toList().reversed) {
+      chemin.lineTo(p.dx, p.dy);
+    }
+    chemin
+      ..lineTo((base + n * demi * 2).dx, (base + n * demi * 2).dy)
+      ..lineTo(fin.dx, fin.dy)
+      ..lineTo((base - n * demi * 2).dx, (base - n * demi * 2).dy);
+    for (final p in droite.reversed) {
+      chemin.lineTo(p.dx, p.dy);
+    }
+    chemin.close();
+    canvas.drawPath(chemin, Paint()..color = couleur.withValues(alpha: 0.12));
+    canvas.drawPath(chemin, contour);
   }
 
   Path _zigzag(List<Offset> pts) {

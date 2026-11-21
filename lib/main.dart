@@ -204,7 +204,9 @@ class _CarteScreenState extends State<CarteScreen> {
     });
   }
 
-  int get _pointsMini => switch (_outil?.forme) {
+  int get _pointsMini =>
+      _outil?.modele?.points ??
+      switch (_outil?.forme) {
         FormeDessin.point || FormeDessin.symbole || FormeDessin.ennemi => 1,
         FormeDessin.ligne => 2,
         FormeDessin.zone => 3,
@@ -212,7 +214,9 @@ class _CarteScreenState extends State<CarteScreen> {
         null => 1,
       };
 
-  int? get _pointsMaxi => switch (_outil?.forme) {
+  int? get _pointsMaxi =>
+      _outil?.modele?.points ??
+      switch (_outil?.forme) {
         FormeDessin.point || FormeDessin.symbole => 1,
         FormeDessin.mission => _outil!.mission!.pointsMaxi,
         _ => null,
@@ -227,6 +231,13 @@ class _CarteScreenState extends State<CarteScreen> {
           : 'Départ posé sur le pion. Touchez le chemin jusqu\'à l\'objectif, puis Terminer.';
     }
     if (m != null) return m.consigne;
+    final mod = o.modele;
+    if (mod?.code == 'secteur_tir') {
+      return 'Touchez l\'arme, puis la première limite, puis la seconde.';
+    }
+    if (mod?.code == 'axe') {
+      return 'Touchez le départ de l\'axe, puis son tracé jusqu\'à la pointe.';
+    }
     return switch (o.forme) {
       FormeDessin.point => 'Touchez la carte pour placer le point.',
       FormeDessin.symbole =>
@@ -251,6 +262,7 @@ class _CarteScreenState extends State<CarteScreen> {
       auteurIndicatif: '',
       mission: o.mission?.code,
       pion: _pion,
+      modele: o.modele?.code ?? '',
     );
   }
 
@@ -342,13 +354,15 @@ class _CarteScreenState extends State<CarteScreen> {
       context,
       titre: m != null
           ? '${m.nom}${_pion.isEmpty ? '' : ' : $_pion'}'
-          : switch (o.forme) {
-              FormeDessin.symbole =>
-                symboleDuCode(o.sidc)?.nom ?? 'Nouveau symbole',
-              FormeDessin.point => 'Nouveau point',
-              FormeDessin.ligne => 'Nouvelle ligne',
-              _ => 'Nouvelle zone',
-            },
+          : o.modele != null
+              ? o.modele!.nom
+              : switch (o.forme) {
+                  FormeDessin.symbole =>
+                    symboleDuCode(o.sidc)?.nom ?? 'Nouveau symbole',
+                  FormeDessin.point => 'Nouveau point',
+                  FormeDessin.ligne => 'Nouvelle ligne',
+                  _ => 'Nouvelle zone',
+                },
       calques: _partage.calques,
       calqueSuggere: _partage.calques.contains(_dernierCalque)
           ? _dernierCalque
@@ -356,7 +370,9 @@ class _CarteScreenState extends State<CarteScreen> {
       couleurSuggeree: Colors.blue,
       nomFacultatif: m != null || o.forme == FormeDessin.symbole,
       avecCouleur: o.forme != FormeDessin.symbole,
-      exempleNom: o.forme == FormeDessin.symbole ? 'ex. 1re SON, PC CIE' : null,
+      exempleNom: o.forme == FormeDessin.symbole
+          ? 'ex. 1re SON, PC CIE'
+          : o.modele?.exemple,
     );
     if (!mounted) return;
     if (fin == null) {
@@ -377,6 +393,7 @@ class _CarteScreenState extends State<CarteScreen> {
       mission: m?.code,
       pion: _pion,
       sidc: o.sidc,
+      modele: o.modele?.code ?? '',
     ));
     _dernierCalque = fin.calque;
     _abandonnerTrace();

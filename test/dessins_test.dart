@@ -119,4 +119,23 @@ void main() {
     expect(p.camarades, isEmpty); // pas pris pour un camarade
     expect(p.dessins.keys, ['E1']);
   });
+
+  test('les lignes et zones de la liste gardent leur modèle', () {
+    for (final m in modeles) {
+      final d = Dessin(
+        uid: 'L-${m.code}',
+        forme: m.forme,
+        points: const [LatLng(48, 2), LatLng(48.01, 2.01), LatLng(48.02, 2)],
+        nom: 'BLEUE',
+        couleur: Colors.blue,
+        calque: 'Phase 1',
+        auteur: 'A',
+        auteurIndicatif: 'A',
+        modele: m.code,
+      );
+      final lu = Dessin.depuisXml(d.versXml())!;
+      expect(lu.leModele?.nom, m.nom);
+      expect(lu.forme, m.forme);
+    }
+  });
 }

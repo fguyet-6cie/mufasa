@@ -74,6 +74,44 @@ const missions = <Mission>[
       style: StyleTrait.pointilles),
 ];
 
+/// Lignes et zones de la liste validée (tracées par l'appli).
+class Modele {
+  final String code;
+  final String nom;
+
+  /// Sigle affiché sur le tracé (ex. « LD », « OBJ »).
+  final String sigle;
+  final FormeDessin forme;
+
+  /// Nombre de points imposé (null = libre).
+  final int? points;
+  final String exemple;
+  const Modele(this.code, this.nom, this.sigle, this.forme,
+      {this.points, this.exemple = ''});
+}
+
+const modeles = <Modele>[
+  Modele('limite', 'Limite', '', FormeDessin.ligne,
+      exemple: 'ex. 1re SON / 2e SON'),
+  Modele('ld', 'Ligne de débouché', 'LD', FormeDessin.ligne,
+      exemple: 'ex. BLEUE'),
+  Modele('pl', 'Ligne de coordination', 'PL', FormeDessin.ligne,
+      exemple: 'ex. ROUGE'),
+  Modele('itineraire', 'Itinéraire', 'ITI', FormeDessin.ligne,
+      exemple: 'ex. FER'),
+  Modele('axe', 'Axe d\'effort', '', FormeDessin.ligne, exemple: 'ex. 1re SON'),
+  Modele('barbeles', 'Réseau de barbelés', '', FormeDessin.ligne),
+  Modele('objectif', 'Objectif', 'OBJ', FormeDessin.zone, exemple: 'ex. LION'),
+  Modele('regroupement', 'Zone de regroupement', 'ZR', FormeDessin.zone,
+      exemple: 'ex. 1'),
+  Modele('champ_mines', 'Champ de mines', '', FormeDessin.zone),
+  Modele('secteur_tir', 'Secteur de tir', 'ST', FormeDessin.ligne,
+      points: 3, exemple: 'ex. MIT 1'),
+];
+
+Modele? modeleParCode(String? code) =>
+    modeles.where((m) => m.code == code).firstOrNull;
+
 Mission? missionParCode(String? code) =>
     missions.where((m) => m.code == code).firstOrNull;
 
@@ -124,6 +162,10 @@ class Dessin {
   /// Pour un symbole OTAN posé sur la carte : son code SIDC.
   final String sidc;
 
+  /// Pour une ligne ou une zone de la liste : code du modèle (ex. « ld »).
+  final String modele;
+  Modele? get leModele => modeleParCode(modele);
+
   /// Pour un ennemi signalé : les informations remplies par l'observateur.
   final Map<String, String> fiche;
 
@@ -134,6 +176,7 @@ class Dessin {
     this.pion = '',
     this.sidc = '',
     this.fiche = const {},
+    this.modele = '',
     required this.uid,
     required this.forme,
     required this.points,
@@ -175,6 +218,7 @@ class Dessin {
       pion: pion,
       sidc: sidc,
       fiche: fiche,
+      modele: modele,
     );
   }
 
@@ -245,6 +289,7 @@ class Dessin {
           ? ''
           : ' mission="${_e(mission!)}" pion="${_e(pion)}"')
       ..write(sidc.isEmpty ? '' : ' sidc="${_e(sidc)}"')
+      ..write(modele.isEmpty ? '' : ' modele="${_e(modele)}"')
       ..write('/>')
       ..write('</detail></event>');
     return b.toString();
@@ -320,6 +365,7 @@ class Dessin {
             : null,
         pion: mufasa?.getAttribute('pion') ?? '',
         sidc: sidc,
+        modele: mufasa?.getAttribute('modele') ?? '',
         fiche: {
           for (final c in detail.findElements('__champ'))
             if (c.getAttribute('cle') case final cle?)

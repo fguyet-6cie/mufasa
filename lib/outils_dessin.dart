@@ -9,7 +9,8 @@ class ChoixOutil {
   final FormeDessin forme;
   final Mission? mission;
   final String sidc;
-  const ChoixOutil(this.forme, [this.mission, this.sidc = '']);
+  final Modele? modele;
+  const ChoixOutil(this.forme, [this.mission, this.sidc = '', this.modele]);
 }
 
 Future<ChoixOutil?> choisirOutil(BuildContext context) {
@@ -59,6 +60,26 @@ Future<ChoixOutil?> choisirOutil(BuildContext context) {
                 }
               },
             ),
+            const _Titre('Lignes et zones'),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final m in modeles)
+                  ActionChip(
+                    avatar: Icon(
+                        m.forme == FormeDessin.zone
+                            ? Icons.pentagon_outlined
+                            : Icons.timeline,
+                        size: 18),
+                    label: Text(m.nom),
+                    onPressed: () =>
+                        Navigator.pop(ctx, ChoixOutil(m.forme, null, '', m)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
             const _Titre('Dessin libre'),
             ListTile(
               leading: const Icon(Icons.place),
