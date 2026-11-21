@@ -5,9 +5,14 @@ import 'package:mufasa/partage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('La carte Mufasa démarre', (tester) async {
+  testWidgets('L\'accueil puis la carte Mufasa démarrent', (tester) async {
     SharedPreferences.setMockInitialValues({'indicatif': 'ALPHA 1', 'mode': 0});
     await tester.pumpWidget(const MufasaApp());
+    // Écran d'accueil aux couleurs de la compagnie.
+    expect(find.text('MUFASA'), findsOneWidget);
+    expect(find.text('6e COMPAGNIE · 21e RIMa'), findsOneWidget);
+    await tester.tap(find.text('ENTRER'));
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Mufasa'), findsOneWidget);
   });
 

@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 
 import 'dart:math';
 
+import 'accueil.dart';
 import 'cot.dart';
 import 'dessins.dart';
 import 'ennemi.dart';
@@ -20,8 +21,15 @@ import 'symboles.dart';
 
 void main() => runApp(const MufasaApp());
 
-class MufasaApp extends StatelessWidget {
+class MufasaApp extends StatefulWidget {
   const MufasaApp({super.key});
+
+  @override
+  State<MufasaApp> createState() => _MufasaAppState();
+}
+
+class _MufasaAppState extends State<MufasaApp> {
+  bool _accueil = true;
 
   @override
   Widget build(BuildContext context) {
@@ -29,10 +37,22 @@ class MufasaApp extends StatelessWidget {
       title: 'Mufasa',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF4B5320), // vert olive
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: CouleursCie.carmin,
+          primary: CouleursCie.carmin,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: CouleursCie.carmin,
+          foregroundColor: Colors.white,
+        ),
         useMaterial3: true,
       ),
-      home: const CarteScreen(),
+      home: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 400),
+        child: _accueil
+            ? AccueilScreen(onEntrer: () => setState(() => _accueil = false))
+            : const CarteScreen(),
+      ),
     );
   }
 }
@@ -516,7 +536,25 @@ class _CarteScreenState extends State<CarteScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mufasa'),
+        title: Row(children: [
+          Image.asset('assets/images/insigne_6cie.png', height: 32),
+          const SizedBox(width: 10),
+          const Text('Mufasa',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
+        ]),
+        flexibleSpace: const Align(
+          alignment: Alignment.bottomCenter,
+          child: Row(children: [
+            Expanded(
+                child: SizedBox(
+                    height: 3,
+                    child: ColoredBox(color: CouleursCie.bleuMarine))),
+            Expanded(
+                child: SizedBox(
+                    height: 3,
+                    child: ColoredBox(color: CouleursCie.rougeMarine))),
+          ]),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
