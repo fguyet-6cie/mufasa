@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
 import 'dessins.dart';
+import 'symboles.dart';
 
 /// Couche de carte qui peint tous les dessins visibles.
 class CoucheDessins extends StatelessWidget {
@@ -122,6 +123,8 @@ class _Peintre extends CustomPainter {
           _etiquette(canvas, haut + const Offset(0, -14), d.nom, d.couleur);
         case FormeDessin.mission:
           _mission(canvas, d, pts, trait);
+        case FormeDessin.symbole:
+          break; // dessiné par CoucheSymboles
       }
       if (estBrouillon) {
         for (final p in pts) {
@@ -348,4 +351,55 @@ class _Peintre extends CustomPainter {
 
   @override
   bool shouldRepaint(_Peintre old) => true;
+}
+
+/// Couche des symboles OTAN posés sur la carte (pions, matériels, points…).
+MarkerLayer coucheSymboles(Iterable<Dessin> dessins) {
+  // Échelle fixe : tous les cadres ont la même taille, PC et échelons en plus.
+  const k = 0.85, etiquette = 18.0, largeurMini = 110.0;
+  return MarkerLayer(markers: [
+    for (final d in dessins.where((d) => d.forme == FormeDessin.symbole))
+      () {
+        final (l, h, ax, ay) = ImageSymbole.mesures(d.sidc);
+        final w = l * k, hauteur = h * k;
+        final largeur = w > largeurMini ? w : largeurMini;
+        final total = hauteur + etiquette;
+        // Le point d'ancrage du symbole (centre du cadre) tombe sur la position.
+        final axs = largeur / 2 - w / 2 + ax * k, ays = ay * k;
+        return Marker(
+          point: d.points.first,
+          width: largeur,
+          height: total,
+          alignment: Alignment(1 - 2 * axs / largeur, 1 - 2 * ays / total),
+          child: IgnorePointer(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ImageSymbole(d.sidc, hauteur: hauteur),
+                if (d.nom.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      d.nom,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: estEnnemi(d.sidc)
+                            ? Colors.red.shade800
+                            : Colors.black,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }(),
+  ]);
 }

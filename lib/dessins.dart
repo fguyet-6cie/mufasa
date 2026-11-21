@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:xml/xml.dart';
 
-enum FormeDessin { point, ligne, zone, mission }
+import 'symboles.dart';
+
+enum FormeDessin { point, ligne, zone, mission, symbole }
 
 /// Comment un graphique de mission est tracé.
 enum TraceMission {
@@ -63,11 +65,9 @@ const missions = <Mission>[
   Mission('fixer', 'Fixer', 'F', TraceMission.fleche,
       style: StyleTrait.zigzag, pointePleine: true),
   Mission('detruire', 'Détruire', 'D', TraceMission.croix),
-  Mission('neutraliser', 'Neutraliser', 'N', TraceMission.croix),
   Mission('boucler', 'Boucler', 'I', TraceMission.boucle),
   Mission('couvrir', 'Couvrir', 'C', TraceMission.secteur),
   Mission('surveiller', 'Surveiller', 'S', TraceMission.secteur),
-  Mission('flanc-garder', 'Flanc-garder', 'G', TraceMission.secteur),
   Mission('reconnaitre', 'Reconnaître', 'RECO', TraceMission.fleche,
       style: StyleTrait.tirets),
   Mission('eclairer', 'Éclairer', 'ECL', TraceMission.fleche,
@@ -108,11 +108,15 @@ class Dessin {
   final String? mission;
   final String pion;
 
+  /// Pour un symbole OTAN posé sur la carte : son code SIDC.
+  final String sidc;
+
   Mission? get laMission => missionParCode(mission);
 
   Dessin({
     this.mission,
     this.pion = '',
+    this.sidc = '',
     required this.uid,
     required this.forme,
     required this.points,
@@ -125,7 +129,7 @@ class Dessin {
   }) : heure = (heure ?? DateTime.now()).toUtc();
 
   LatLng get centre {
-    if (forme == FormeDessin.point) return points.first;
+    if (points.length == 1) return points.first;
     var lat = 0.0, lon = 0.0;
     for (final p in points) {
       lat += p.latitude;
@@ -134,9 +138,35 @@ class Dessin {
     return LatLng(lat / points.length, lon / points.length);
   }
 
+  /// Copie déplacée : le centre du dessin va au nouvel endroit.
+  Dessin deplace(LatLng vers, {required String par}) {
+    final c = centre;
+    final dLat = vers.latitude - c.latitude,
+        dLon = vers.longitude - c.longitude;
+    return Dessin(
+      uid: uid,
+      forme: forme,
+      points: [
+        for (final p in points) LatLng(p.latitude + dLat, p.longitude + dLon)
+      ],
+      nom: nom,
+      couleur: couleur,
+      calque: calque,
+      auteur: par,
+      auteurIndicatif: auteurIndicatif,
+      mission: mission,
+      pion: pion,
+      sidc: sidc,
+    );
+  }
+
   /// Types CoT : point de carte « b-m-p-s-m », tracé « u-d-f »
   /// (une zone est un tracé fermé : son premier point est répété à la fin).
-  String get typeCot => forme == FormeDessin.point ? 'b-m-p-s-m' : 'u-d-f';
+  String get typeCot => switch (forme) {
+        FormeDessin.point => 'b-m-p-s-m',
+        FormeDessin.symbole => typeCotDuSymbole(sidc),
+        _ => 'u-d-f',
+      };
 
   static String _e(String s) => s
       .replaceAll('&', '&amp;')
@@ -159,7 +189,10 @@ class Dessin {
           '<point lat="${c.latitude}" lon="${c.longitude}" hae="9999999.0" ')
       ..write('ce="9999999.0" le="9999999.0"/><detail>')
       ..write('<contact callsign="${_e(nom)}"/>');
-    if (forme == FormeDessin.point) {
+    if (forme == FormeDessin.symbole) {
+      // Code du symbole, lisible par d'autres outils compatibles.
+      b.write('<__milsym id="${_e(sidc)}"/>');
+    } else if (forme == FormeDessin.point) {
       b.write('<color argb="$argb"/>');
     } else {
       final liste = [...points, if (forme == FormeDessin.zone) points.first];
@@ -182,6 +215,7 @@ class Dessin {
       ..write(mission == null
           ? ''
           : ' mission="${_e(mission!)}" pion="${_e(pion)}"')
+      ..write(sidc.isEmpty ? '' : ' sidc="${_e(sidc)}"')
       ..write('/>')
       ..write('</detail></event>');
     return b.toString();
@@ -195,8 +229,12 @@ class Dessin {
       final uid = ev.getAttribute('uid');
       final detail = ev.getElement('detail');
       if (uid == null || detail == null) return null;
-      if (!type.startsWith('b-m-p') && type != 'u-d-f') return null;
       final mufasa = detail.getElement('__mufasa');
+      final sidc = mufasa?.getAttribute('sidc') ?? '';
+      final estSymbole = sidc.isNotEmpty;
+      if (!estSymbole && !type.startsWith('b-m-p') && type != 'u-d-f') {
+        return null;
+      }
       final nom = detail.getElement('contact')?.getAttribute('callsign') ?? '';
       final parent = detail
           .findElements('link')
@@ -210,9 +248,9 @@ class Dessin {
       FormeDessin forme;
       List<LatLng> points;
       Color couleur;
-      if (type.startsWith('b-m-p')) {
+      if (estSymbole || type.startsWith('b-m-p')) {
         final pt = ev.getElement('point')!;
-        forme = FormeDessin.point;
+        forme = estSymbole ? FormeDessin.symbole : FormeDessin.point;
         points = [
           LatLng(double.parse(pt.getAttribute('lat')!),
               double.parse(pt.getAttribute('lon')!))
@@ -244,6 +282,7 @@ class Dessin {
             ? mufasa?.getAttribute('mission')
             : null,
         pion: mufasa?.getAttribute('pion') ?? '',
+        sidc: sidc,
         uid: uid,
         forme: forme,
         points: points,

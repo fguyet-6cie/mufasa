@@ -14,6 +14,7 @@ import 'graphiques.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
 import 'reglages.dart';
+import 'symboles.dart';
 
 void main() => runApp(const MufasaApp());
 
@@ -73,6 +74,7 @@ class _CarteScreenState extends State<CarteScreen> {
   ChoixOutil? _outil;
   String _pion = '';
   bool _departAuto = false;
+  Dessin? _aDeplacer;
   final _pointsTrace = <LatLng>[];
   String _dernierCalque = calqueParDefaut;
 
@@ -168,6 +170,13 @@ class _CarteScreenState extends State<CarteScreen> {
           _reglages!.indicatif: _maPosition!,
         for (final c in _partage.camarades.values)
           c.indicatif: LatLng(c.lat, c.lon),
+        // Pions amis posés sur la carte (unités nommées).
+        for (final d in _partage.dessins.values)
+          if (d.forme == FormeDessin.symbole &&
+              d.nom.isNotEmpty &&
+              !estEnnemi(d.sidc) &&
+              symboleDuCode(d.sidc)?.famille == FamilleSymbole.unite)
+            d.nom: d.points.first,
       };
       final choisi = await choisirPion(context, m, positions.keys.toList());
       if (choisi == null || !mounted) return;
@@ -190,7 +199,7 @@ class _CarteScreenState extends State<CarteScreen> {
   }
 
   int get _pointsMini => switch (_outil?.forme) {
-        FormeDessin.point => 1,
+        FormeDessin.point || FormeDessin.symbole => 1,
         FormeDessin.ligne => 2,
         FormeDessin.zone => 3,
         FormeDessin.mission => _outil!.mission!.pointsMini,
@@ -198,7 +207,7 @@ class _CarteScreenState extends State<CarteScreen> {
       };
 
   int? get _pointsMaxi => switch (_outil?.forme) {
-        FormeDessin.point => 1,
+        FormeDessin.point || FormeDessin.symbole => 1,
         FormeDessin.mission => _outil!.mission!.pointsMaxi,
         _ => null,
       };
@@ -214,6 +223,8 @@ class _CarteScreenState extends State<CarteScreen> {
     if (m != null) return m.consigne;
     return switch (o.forme) {
       FormeDessin.point => 'Touchez la carte pour placer le point.',
+      FormeDessin.symbole =>
+        'Touchez la carte pour poser : ${symboleDuCode(o.sidc)?.nom ?? 'symbole'}.',
       FormeDessin.ligne =>
         'Touchez la carte pour poser les points de la ligne.',
       _ => 'Touchez la carte pour poser les coins de la zone.',
@@ -238,6 +249,12 @@ class _CarteScreenState extends State<CarteScreen> {
   }
 
   void _toucherCarte(TapPosition tap, LatLng point) {
+    final aDeplacer = _aDeplacer;
+    if (aDeplacer != null) {
+      _partage.ajouterDessin(aDeplacer.deplace(point, par: aDeplacer.auteur));
+      setState(() => _aDeplacer = null);
+      return;
+    }
     if (_enTrace) {
       setState(() => _pointsTrace.add(point));
       final maxi = _pointsMaxi;
@@ -250,8 +267,15 @@ class _CarteScreenState extends State<CarteScreen> {
   }
 
   Future<void> _ouvrirFiche(Dessin d) async {
-    final supprimer = await ficheDessin(context, d);
-    if (supprimer == true) _partage.supprimerDessin(d.uid);
+    final action = await ficheDessin(context, d);
+    switch (action) {
+      case ActionDessin.supprimer:
+        _partage.supprimerDessin(d.uid);
+      case ActionDessin.deplacer:
+        setState(() => _aDeplacer = d);
+      case null:
+        break;
+    }
   }
 
   void _abandonnerTrace() => setState(() {
@@ -268,6 +292,8 @@ class _CarteScreenState extends State<CarteScreen> {
       titre: m != null
           ? '${m.nom}${_pion.isEmpty ? '' : ' : $_pion'}'
           : switch (o.forme) {
+              FormeDessin.symbole =>
+                symboleDuCode(o.sidc)?.nom ?? 'Nouveau symbole',
               FormeDessin.point => 'Nouveau point',
               FormeDessin.ligne => 'Nouvelle ligne',
               _ => 'Nouvelle zone',
@@ -277,7 +303,9 @@ class _CarteScreenState extends State<CarteScreen> {
           ? _dernierCalque
           : calqueParDefaut,
       couleurSuggeree: Colors.blue,
-      nomFacultatif: m != null,
+      nomFacultatif: m != null || o.forme == FormeDessin.symbole,
+      avecCouleur: o.forme != FormeDessin.symbole,
+      exempleNom: o.forme == FormeDessin.symbole ? 'ex. 1re SON, PC CIE' : null,
     );
     if (!mounted) return;
     if (fin == null) {
@@ -297,6 +325,7 @@ class _CarteScreenState extends State<CarteScreen> {
       auteurIndicatif: _reglages?.indicatif ?? '',
       mission: m?.code,
       pion: _pion,
+      sidc: o.sidc,
     ));
     _dernierCalque = fin.calque;
     _abandonnerTrace();
@@ -432,6 +461,7 @@ class _CarteScreenState extends State<CarteScreen> {
                 dessins: _partage.dessinsVisibles.toList(),
                 brouillon: _brouillon,
               ),
+              coucheSymboles(_partage.dessinsVisibles),
               MarkerLayer(markers: [
                 for (final c in _partage.camarades.values) _marqueurCamarade(c),
               ]),
@@ -460,6 +490,24 @@ class _CarteScreenState extends State<CarteScreen> {
           ),
           if (!_enTrace)
             Positioned(left: 12, bottom: 24, child: _bandeauPartage()),
+          if (_aDeplacer != null)
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Material(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                elevation: 2,
+                child: ListTile(
+                  title: const Text('Touchez le nouvel emplacement.'),
+                  trailing: TextButton(
+                    onPressed: () => setState(() => _aDeplacer = null),
+                    child: const Text('Annuler'),
+                  ),
+                ),
+              ),
+            ),
           if (_enTrace)
             Positioned(
               top: 12,

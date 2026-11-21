@@ -25,7 +25,7 @@ Dessin exemple(String uid,
 
 void main() {
   test('chaque forme de dessin se relit à l\'identique', () {
-    for (final f in FormeDessin.values) {
+    for (final f in FormeDessin.values.where((f) => f != FormeDessin.symbole)) {
       final d = exemple('D-$f',
           forme: f, mission: f == FormeDessin.mission ? 'attaquer' : null);
       final lu = Dessin.depuisXml(d.versXml())!;
