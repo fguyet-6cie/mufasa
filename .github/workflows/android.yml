@@ -46,5 +46,5 @@ jobs:
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk mufasa.apk
           gh release create "v0.2.${{ github.run_number }}" mufasa.apk \
-            --title "Mufasa 0.2 (version ${{ github.run_number }})" \
+            --title "MUFASA 0.2 (version ${{ github.run_number }})" \
             --notes "Fabriquée automatiquement depuis le commit ${{ github.sha }}. Sur le téléphone Android : télécharger mufasa.apk puis l'ouvrir pour l'installer."
