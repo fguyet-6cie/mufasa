@@ -19,7 +19,6 @@ class _LiaisonInactive extends Liaison {
 }
 
 Liaison liaisonWifi() => _LiaisonInactive('Wi-Fi local');
-Liaison liaisonServeur(String hote, int port) => _LiaisonInactive('Serveur');
 Liaison liaisonRelais({
   required String hote,
   required int port,

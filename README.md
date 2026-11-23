@@ -1,6 +1,8 @@
-# Mufasa
+# MUFASA
 
-Appli terrain collaborative de la 6e compagnie (instruction et exercices).
+**Military Units Follow-up And Situational Awareness**
+
+Appli terrain collaborative de la 6e compagnie du 21e RIMa (instruction et exercices).
 Android et iPhone, écrite avec Flutter.
 
 ## Installer l'appli sur un téléphone Android
@@ -10,47 +12,51 @@ Sur le téléphone, ouvrir https://github.com/fguyet-6cie/mufasa/releases/latest
 télécharger `mufasa.apk`, puis l'ouvrir pour l'installer (autoriser
 « installer des applis inconnues » si le téléphone le demande).
 
-## Où en est-on
+## Ce que fait l'appli
 
-Étape 1 (faite) : carte avec fonds IGN (Plan IGN, photos aériennes) et position du téléphone.
-Étape 2 (faite) : partage des positions entre les membres du groupe, au format CoT.
-- 4G/5G (mode principal) : via une « boîte aux lettres » en ligne (MQTT sur TLS, port 8883,
-  par exemple HiveMQ Cloud gratuit). Les positions sont chiffrées dans le téléphone
+1. **Position de tout le personnel** sur fond IGN (plan ou photos aériennes).
+   - Pions bleus, cadre de la couleur de la section (CARMIN 1 bleu, 2 rouge,
+     3 jaune, 4 vert, SK blanc), numéro de section ou de GOLF, lion pour le CDU.
+   - Mon groupe en bleu foncé, mon trinôme avec un halo jaune.
+   - Toucher un pion : bulle bleue avec nom, fonction et coordonnées MGRS.
+   - « Ce que je vois » : toute la compagnie, ma section ou mon groupe, et
+     jusqu'aux chefs de section, chefs de groupe ou tout le monde.
+2. **Ennemis** : bouton Ennemi, fiche (volume, nature, attitude, direction…),
+   rond rouge chez tous. Les ennemis pâlissent après 30 min ; boutons
+   « Toujours là », « Il a bougé », « Plus là » ; détection « même ennemi ? ».
+3. **Points particuliers** (losange orange) avec observations.
+4. **Dessin libre** (lignes et zones) partagé avec tout le monde.
+5. **Effacement d'urgence** de toutes les données du téléphone.
+
+## Partage entre téléphones
+
+- 4G/5G : via une « boîte aux lettres » en ligne (MQTT sur TLS, port 8883,
+  par exemple HiveMQ Cloud gratuit). Les messages sont chiffrés dans le téléphone
   (AES-256-GCM) avec une clé tirée du code de groupe : l'hébergeur ne peut pas les lire.
   Les réglages se partagent en un seul texte « invitation » (MUFASA1:…).
-- Sans réseau mobile : téléphones sur le même Wi-Fi ou partage de connexion (multidiffusion 239.2.3.1:6969).
-- Serveur TAK : connexion TCP à un serveur TAK (port 8087 par défaut), pour l'interopérabilité.
-Étape 3 (faite) : calques et manœuvre.
-- Dessins partagés : points, lignes, zones, rangés en calques qu'on affiche ou masque.
-- Graphiques de mission rattachés à un pion : attaquer, fixer, détruire, neutraliser,
-  boucler, couvrir, surveiller, flanc-garder, reconnaître, éclairer (inspirés de l'APP-6).
-- Toucher un dessin pour voir qui l'a fait, ou le supprimer pour tout le groupe.
-- Les dessins sont gardés dans le téléphone et renvoyés chaque minute aux retardataires.
+- Sans réseau mobile : téléphones sur le même Wi-Fi ou partage de connexion
+  (multidiffusion 239.21.6.6:21606).
 
-Étape 4 (faite) : pions OTAN, ennemis, hiérarchie, lignes et zones.
-- 32 symboles OTAN validés (ami / ennemi, échelons, PC), images générées par outils/gen_symboles.js.
-- Bouton Ennemi : fiche (volume, nature, attitude…) et point rouge chez tous.
-- Vue hiérarchique : chaque chef voit ses subordonnés jusqu'au niveau qu'il choisit.
-- Lignes et zones : limite, LD, PL, itinéraire, axe d'effort, barbelés, objectif,
-  zone de regroupement, champ de mines, secteur de tir.
-
-Limite connue : sur iPhone, le mode sans serveur demande une autorisation spéciale d'Apple
-(« multicast entitlement ») ; le mode avec serveur marche sans.
+Limite connue : sur iPhone, le mode Wi-Fi demande une autorisation spéciale d'Apple
+(« multicast entitlement ») ; le mode 4G/5G marche sans.
 
 ## Fichiers importants
 
 - `lib/main.dart` : l'écran carte.
-- `lib/reglages.dart` : l'écran réglages (indicatif, équipe, mode de partage).
+- `lib/accueil.dart` : l'écran d'accueil.
+- `lib/reglages.dart` : l'écran réglages (indicatif, place dans la compagnie, mode de partage).
+- `lib/hierarchie.dart` : sections, groupes, trinômes et filtre « Ce que je vois ».
+- `lib/pions.dart` : dessin des pions amis, bulle, légende.
 - `lib/partage.dart` : envoi de ma position toutes les 10 s, liste des camarades.
-- `lib/cot.dart` : lecture et écriture des messages CoT.
-- `lib/dessins.dart` : dessins, calques et missions (format CoT).
-- `lib/graphiques.dart` : tracé des dessins et des graphiques de mission sur la carte.
-- `lib/outils_dessin.dart` : fenêtres pour dessiner (outil, pion, calque, couleur).
-- `lib/chiffrement.dart` : chiffrement des positions avec le code de groupe.
-- `lib/reseau/` : les modes de liaison (4G/5G, Wi-Fi local, serveur TAK).
+- `lib/cot.dart` : lecture et écriture des messages de position (XML).
+- `lib/dessins.dart` : ennemis, points particuliers, lignes et zones.
+- `lib/graphiques.dart` : tracé des dessins et des ennemis sur la carte.
+- `lib/ennemi.dart` : fiche de désignation d'un ennemi.
+- `lib/outils_dessin.dart` : fenêtres pour dessiner et fiche d'un dessin.
+- `lib/mgrs.dart` : coordonnées MGRS.
+- `lib/chiffrement.dart` : chiffrement des messages avec le code de groupe.
+- `lib/reseau/` : les modes de liaison (4G/5G, Wi-Fi local).
 - `test/` : les tests automatiques (`flutter test`).
-- `pubspec.yaml` : la liste des briques utilisées (carte, GPS).
-- `android/` et `ios/` : réglages propres à chaque téléphone (autorisations GPS, nom de l'appli).
 
 ## Lancer l'appli (pour un développeur)
 

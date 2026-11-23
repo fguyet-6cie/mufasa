@@ -56,7 +56,17 @@ class AccueilScreen extends StatelessWidget {
                               letterSpacing: 10,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          Text(
+                            'Military Units Follow-up\nAnd Situational Awareness',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 12,
+                              letterSpacing: 1.2,
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
                           const Text(
                             '6e COMPAGNIE · 21e RIMa',
                             style: TextStyle(

@@ -58,16 +58,6 @@ extension NiveauFonction on Fonction {
         _ => '',
       };
 
-  /// Rôle compris par les autres outils compatibles (TAK).
-  String get roleTak => switch (this) {
-        Fonction.cdu => 'HQ',
-        Fonction.chefSection ||
-        Fonction.chefGroupe ||
-        Fonction.chefEquipe =>
-          'Team Lead',
-        _ => 'Team Member',
-      };
-
   bool get aSection => niveau >= 1 && this != Fonction.sk;
   bool get aGroupe => niveau >= 2 && this != Fonction.sk;
   bool get aEquipe => niveau >= 3 && this != Fonction.sk;

@@ -449,7 +449,7 @@ class _CarteScreenState extends State<CarteScreen> {
     _abandonnerTrace();
   }
 
-  Future<void> _ouvrirCalques() async {
+  Future<void> _ouvrirAffichage() async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -624,7 +624,7 @@ class _CarteScreenState extends State<CarteScreen> {
           IconButton(
             icon: const Icon(Icons.layers),
             tooltip: 'Fond de carte et niveaux',
-            onPressed: _ouvrirCalques,
+            onPressed: _ouvrirAffichage,
           ),
         ],
       ),

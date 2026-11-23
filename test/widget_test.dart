@@ -11,16 +11,19 @@ void main() {
     // Écran d'accueil aux couleurs de la compagnie.
     expect(find.text('MUFASA'), findsOneWidget);
     expect(find.text('6e COMPAGNIE · 21e RIMa'), findsOneWidget);
+    expect(find.textContaining('Situational Awareness'), findsOneWidget);
     await tester.tap(find.text('ENTRER'));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('Mufasa'), findsOneWidget);
+    // Sur la carte, plus d'écran d'accueil : le titre est dans la barre.
+    expect(find.text('ENTRER'), findsNothing);
+    expect(find.text('MUFASA'), findsOneWidget);
   });
 
   test('les positions reçues alimentent la liste des camarades', () {
     final p = Partage();
-    p.recevoir(CotEvenement.maPosition(
-            uid: 'B', indicatif: 'BRAVO', equipe: 'Red', lat: 1, lon: 2)
-        .versXml());
+    p.recevoir(
+        CotEvenement.maPosition(uid: 'B', indicatif: 'BRAVO', lat: 1, lon: 2)
+            .versXml());
     p.recevoir('<event uid="X" type="b-m-p"><point lat="1" lon="2"/></event>');
     p.recevoir('déchet');
     expect(p.camarades.keys, ['B']);

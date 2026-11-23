@@ -81,17 +81,11 @@ void main() {
 
   test('la place circule dans le message de position', () {
     final xml = CotEvenement.maPosition(
-            uid: 'A',
-            indicatif: 'A',
-            equipe: 'Cyan',
-            lat: 1,
-            lon: 2,
-            place: cdg12)
+            uid: 'A', indicatif: 'A', lat: 1, lon: 2, place: cdg12)
         .versXml();
     final lu = CotEvenement.depuisXml(xml)!;
     expect(lu.place.fonction, Fonction.chefGroupe);
     expect(lu.place.section, 1);
     expect(lu.place.groupe, 2);
-    expect(xml, contains('role="Team Lead"'));
   });
 }

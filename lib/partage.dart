@@ -54,10 +54,7 @@ class Partage extends ChangeNotifier {
         return;
       case ModePartage.wifi:
         _liaison = liaisonWifi();
-      case ModePartage.serveur:
-        if (r.hote.isEmpty) return;
-        _liaison = liaisonServeur(r.hote, r.port);
-      case ModePartage.relais:
+      case ModePartage.relais || ModePartage.ancienServeur:
         if (!r.relaisComplet) {
           avertissement = '4G/5G : réglages à compléter';
           notifyListeners();
@@ -112,7 +109,6 @@ class Partage extends ChangeNotifier {
     _liaison!.envoyer(CotEvenement.maPosition(
       uid: r.uid,
       indicatif: r.indicatif,
-      equipe: r.equipe,
       lat: _lat!,
       lon: _lon!,
       precision: _precision,

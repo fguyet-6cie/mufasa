@@ -9,22 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'hierarchie.dart';
 
 /// Attention : l'ordre compte (il est enregistré par numéro). Ajouter à la fin.
-enum ModePartage { aucun, wifi, serveur, relais }
-
-/// Couleurs d'équipe. Le nom anglais est celui qui circule dans les messages
-/// CoT (pour rester compatible), le nom français est affiché.
-const equipes = <String, (String, Color)>{
-  'Cyan': ('Cyan', Colors.cyan),
-  'Red': ('Rouge', Colors.red),
-  'Green': ('Vert', Colors.green),
-  'Yellow': ('Jaune', Colors.amber),
-  'Orange': ('Orange', Colors.orange),
-  'Blue': ('Bleu', Colors.blue),
-  'Purple': ('Violet', Colors.purple),
-  'White': ('Blanc', Colors.white),
-};
-
-Color couleurEquipe(String nom) => equipes[nom]?.$2 ?? Colors.cyan;
+/// « ancienServeur » (ancien mode serveur TAK) n'est plus proposé.
+enum ModePartage { aucun, wifi, ancienServeur, relais }
 
 /// Tout ce qu'il faut pour rejoindre un groupe en 4G/5G, en un seul texte à
 /// envoyer par messagerie : « MUFASA1:… ».
@@ -81,11 +67,7 @@ class Invitation {
 class Reglages {
   String uid;
   String indicatif;
-  String equipe;
   ModePartage mode;
-  // Serveur TAK
-  String hote;
-  int port;
   // Boîte aux lettres 4G/5G
   String relaisHote;
   int relaisPort;
@@ -118,10 +100,7 @@ class Reglages {
     this.ennemisAnciens = true,
     required this.uid,
     required this.indicatif,
-    required this.equipe,
     required this.mode,
-    required this.hote,
-    required this.port,
     required this.relaisHote,
     required this.relaisPort,
     required this.relaisIdentifiant,
@@ -155,10 +134,11 @@ class Reglages {
     return Reglages(
       uid: uid,
       indicatif: p.getString('indicatif') ?? 'Sans nom',
-      equipe: p.getString('equipe') ?? 'Cyan',
-      mode: ModePartage.values[p.getInt('mode') ?? ModePartage.relais.index],
-      hote: p.getString('hote') ?? '',
-      port: p.getInt('port') ?? 8087,
+      mode: switch (
+          ModePartage.values[p.getInt('mode') ?? ModePartage.relais.index]) {
+        ModePartage.ancienServeur => ModePartage.relais,
+        final m => m,
+      },
       relaisHote: p.getString('relaisHote') ?? '',
       relaisPort: p.getInt('relaisPort') ?? 8883,
       relaisIdentifiant: p.getString('relaisIdentifiant') ?? '',
@@ -183,10 +163,7 @@ class Reglages {
   Future<void> enregistrer() async {
     final p = await SharedPreferences.getInstance();
     await p.setString('indicatif', indicatif);
-    await p.setString('equipe', equipe);
     await p.setInt('mode', mode.index);
-    await p.setString('hote', hote);
-    await p.setInt('port', port);
     await p.setString('relaisHote', relaisHote);
     await p.setInt('relaisPort', relaisPort);
     await p.setString('relaisIdentifiant', relaisIdentifiant);
@@ -214,14 +191,11 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
   Reglages get r => widget.reglages;
   late final _indicatif =
       TextEditingController(text: r.indicatif == 'Sans nom' ? '' : r.indicatif);
-  late final _hote = TextEditingController(text: r.hote);
-  late final _port = TextEditingController(text: '${r.port}');
   late final _relaisHote = TextEditingController(text: r.relaisHote);
   late final _relaisPort = TextEditingController(text: '${r.relaisPort}');
   late final _relaisId = TextEditingController(text: r.relaisIdentifiant);
   late final _relaisMdp = TextEditingController(text: r.relaisMotDePasse);
   late final _code = TextEditingController(text: r.codeGroupe);
-  late String _equipe = r.equipe;
   late ModePartage _mode = r.mode;
   late Fonction _fonction = r.fonction;
   late int _section = r.section, _groupe = r.groupe, _equipeNum = r.numEquipe;
@@ -231,8 +205,6 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
   void dispose() {
     for (final c in [
       _indicatif,
-      _hote,
-      _port,
       _relaisHote,
       _relaisPort,
       _relaisId,
@@ -283,10 +255,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
     r
       ..indicatif =
           _indicatif.text.trim().isEmpty ? 'Sans nom' : _indicatif.text.trim()
-      ..equipe = _equipe
       ..mode = _mode
-      ..hote = _hote.text.trim()
-      ..port = int.tryParse(_port.text.trim()) ?? 8087
       ..relaisHote = _relaisHote.text.trim()
       ..relaisPort = int.tryParse(_relaisPort.text.trim()) ?? 8883
       ..relaisIdentifiant = _relaisId.text.trim()
@@ -313,23 +282,6 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
             decoration: const InputDecoration(
                 labelText: 'Mon indicatif', hintText: 'ex. ALPHA 1'),
             textCapitalization: TextCapitalization.characters,
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _equipe,
-            decoration: const InputDecoration(labelText: 'Mon équipe'),
-            items: [
-              for (final e in equipes.entries)
-                DropdownMenuItem(
-                  value: e.key,
-                  child: Row(children: [
-                    CircleAvatar(radius: 8, backgroundColor: e.value.$2),
-                    const SizedBox(width: 8),
-                    Text(e.value.$1),
-                  ]),
-                ),
-            ],
-            onChanged: (v) => setState(() => _equipe = v!),
           ),
           const SizedBox(height: 24),
           Text('Ma place dans la compagnie', style: titre),
@@ -385,11 +337,6 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
                 title: Text('Sans réseau mobile (même Wi-Fi)'),
                 subtitle: Text('Secours : tous les téléphones sur le même '
                     'Wi-Fi ou le même partage de connexion.'),
-              ),
-              RadioListTile(
-                value: ModePartage.serveur,
-                title: Text('Serveur TAK'),
-                subtitle: Text('Pour se brancher sur un serveur TAK existant.'),
               ),
               RadioListTile(
                 value: ModePartage.aucun,
@@ -458,20 +405,6 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
               onPressed: _copierInvitation,
               icon: const Icon(Icons.share),
               label: const Text('Copier une invitation pour mon groupe'),
-            ),
-          ],
-          if (_mode == ModePartage.serveur) ...[
-            TextField(
-              controller: _hote,
-              decoration: const InputDecoration(
-                  labelText: 'Adresse du serveur',
-                  hintText: 'ex. 192.168.1.10'),
-              keyboardType: TextInputType.url,
-            ),
-            TextField(
-              controller: _port,
-              decoration: const InputDecoration(labelText: 'Port'),
-              keyboardType: TextInputType.number,
             ),
           ],
           const SizedBox(height: 24),

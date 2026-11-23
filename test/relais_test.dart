@@ -37,7 +37,7 @@ void main() {
         .firstWhere((e) => e?.uid == 'ALPHA');
     await Future.delayed(const Duration(milliseconds: 300));
     await a.envoyer(CotEvenement.maPosition(
-            uid: 'ALPHA', indicatif: 'ALPHA', equipe: 'Cyan', lat: 48, lon: 2)
+            uid: 'ALPHA', indicatif: 'ALPHA', lat: 48, lon: 2)
         .versXml());
     final ev = await recu.timeout(const Duration(seconds: 5));
     expect(ev!.indicatif, 'ALPHA');

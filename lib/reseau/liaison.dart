@@ -1,10 +1,9 @@
 // Une « liaison » transporte les messages CoT entre téléphones.
-// Trois modes :
+// Deux modes :
 //  - Wi-Fi local (sans serveur) : tous les téléphones sur le même Wi-Fi ou le
 //    même partage de connexion se parlent directement (multidiffusion UDP).
 //  - 4G/5G : chaque téléphone passe par une boîte aux lettres en ligne
 //    (MQTT), avec les positions chiffrées par le code de groupe.
-//  - Serveur TAK : connexion TCP à un serveur TAK (pour l'interopérabilité).
 import 'package:flutter/foundation.dart';
 
 import 'liaison_io.dart' if (dart.library.js_interop) 'liaison_web.dart'
@@ -24,16 +23,12 @@ abstract class Liaison {
   Future<void> arreter();
 }
 
-/// Adresse et port standard de la multidiffusion de positions CoT.
-const groupeMulticast = '239.2.3.1';
-const portMulticast = 6969;
-
-/// Port TCP non chiffré habituel des serveurs TAK.
-const portServeurParDefaut = 8087;
+/// Adresse et port de la multidiffusion propres à Mufasa (on ne reprend pas
+/// ceux d'ATAK, pour ne pas mélanger avec d'autres applis sur le même Wi-Fi).
+const groupeMulticast = '239.21.6.6';
+const portMulticast = 21606;
 
 Liaison liaisonWifi() => impl.liaisonWifi();
-Liaison liaisonServeur(String hote, int port) =>
-    impl.liaisonServeur(hote, port);
 Liaison liaisonRelais({
   required String hote,
   required int port,

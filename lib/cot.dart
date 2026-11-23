@@ -1,6 +1,5 @@
-// Messages CoT (« Cursor on Target ») : le format XML standard utilisé par
-// les outils de situation tactique. Le parler permet à Mufasa d'échanger avec
-// d'autres outils compatibles et avec les serveurs TAK open source.
+// Messages échangés entre téléphones : un petit texte XML (format « CoT »,
+// Cursor on Target) par position ou par dessin.
 import 'package:xml/xml.dart';
 
 import 'hierarchie.dart';
@@ -12,7 +11,6 @@ class CotEvenement {
   /// Type CoT. « a-f-G-U-C » = ami, terrestre, unité, combat.
   final String type;
   final String indicatif;
-  final String equipe;
 
   /// Place dans la compagnie (fonction, section, groupe, équipe).
   final Place place;
@@ -32,7 +30,6 @@ class CotEvenement {
     required this.lat,
     required this.lon,
     this.type = 'a-f-G-U-C',
-    this.equipe = 'Cyan',
     this.place = Place.inconnue,
     this.precision = 9999999,
     DateTime? heure,
@@ -48,7 +45,6 @@ class CotEvenement {
   factory CotEvenement.maPosition({
     required String uid,
     required String indicatif,
-    required String equipe,
     required double lat,
     required double lon,
     double? precision,
@@ -58,7 +54,6 @@ class CotEvenement {
         place: place,
         uid: uid,
         indicatif: indicatif,
-        equipe: equipe,
         lat: lat,
         lon: lon,
         precision: precision ?? 9999999,
@@ -77,9 +72,7 @@ class CotEvenement {
         '<point lat="$lat" lon="$lon" hae="9999999.0" '
         'ce="${precision.toStringAsFixed(1)}" le="9999999.0"/>'
         '<detail><contact callsign="${e(indicatif)}"/>'
-        '<__group name="${e(equipe)}" role="${place.fonction.roleTak}"/>'
-        '<__mufasa ${place.versAttributs()}/>'
-        '<takv platform="Mufasa" version="0.2"/></detail></event>';
+        '<__mufasa ${place.versAttributs()}/></detail></event>';
   }
 
   /// Lit un message CoT. Renvoie null s'il est illisible ou sans position.
@@ -95,8 +88,6 @@ class CotEvenement {
       final detail = ev.getElement('detail');
       final indicatif =
           detail?.getElement('contact')?.getAttribute('callsign') ?? uid;
-      final equipe =
-          detail?.getElement('__group')?.getAttribute('name') ?? 'Cyan';
       final m = detail?.getElement('__mufasa');
       return CotEvenement(
         place: m == null
@@ -105,7 +96,6 @@ class CotEvenement {
         uid: uid,
         type: ev.getAttribute('type') ?? 'a-f-G',
         indicatif: indicatif,
-        equipe: equipe,
         lat: lat,
         lon: lon,
         precision: double.tryParse(pt.getAttribute('ce') ?? '') ?? 9999999,
@@ -115,30 +105,5 @@ class CotEvenement {
     } catch (_) {
       return null;
     }
-  }
-}
-
-/// Découpe un flux TCP en messages CoT complets (un message se termine
-/// par la balise de fin `</event>`). Garde le morceau incomplet pour la suite.
-class DecoupeurCot {
-  final _tampon = StringBuffer();
-
-  List<String> ajouter(String morceau) {
-    _tampon.write(morceau);
-    var texte = _tampon.toString();
-    final messages = <String>[];
-    while (true) {
-      final fin = texte.indexOf('</event>');
-      if (fin < 0) break;
-      final debut = texte.indexOf('<event');
-      if (debut >= 0 && debut < fin) {
-        messages.add(texte.substring(debut, fin + 8));
-      }
-      texte = texte.substring(fin + 8);
-    }
-    _tampon
-      ..clear()
-      ..write(texte.length > 100000 ? '' : texte); // garde-fou mémoire
-    return messages;
   }
 }

@@ -245,7 +245,6 @@ class Legende extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ligne([
-          const Text('Cadre :'),
           for (var i = 1; i <= 4; i++) ...[
             _carre(couleurSection(Place(Fonction.chefSection, section: i))),
             Text('CARMIN $i'),
