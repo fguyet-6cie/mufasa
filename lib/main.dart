@@ -34,7 +34,7 @@ class _MufasaAppState extends State<MufasaApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Mufasa',
+      title: 'MUFASA',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -594,7 +594,7 @@ class _CarteScreenState extends State<CarteScreen> {
         title: Row(children: [
           Image.asset('assets/images/insigne_6cie.png', height: 32),
           const SizedBox(width: 10),
-          const Text('Mufasa',
+          const Text('MUFASA',
               style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
         ]),
         flexibleSpace: const Align(
