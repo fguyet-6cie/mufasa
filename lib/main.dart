@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -373,6 +374,8 @@ class _CarteScreenState extends State<CarteScreen> {
           '${quoi.isEmpty ? '' : '$quoi, '}par ${f['observateur'] ?? d.auteurIndicatif}');
     }
     if (!mounted) return;
+    // Courte vibration, jamais de son.
+    HapticFeedback.vibrate();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       backgroundColor: Colors.red.shade800,
       duration: const Duration(seconds: 10),
