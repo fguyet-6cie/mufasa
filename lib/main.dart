@@ -1,7 +1,9 @@
 // Mufasa – prototype : carte IGN, ma position, positions des camarades.
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -106,6 +108,10 @@ class _CarteScreenState extends State<CarteScreen> {
 
   /// Mon sens de marche (degrés), null si je ne bouge pas.
   double? _monCap;
+
+  /// Direction vers laquelle pointe le téléphone (boussole), en degrés.
+  double? _boussole;
+  StreamSubscription<CompassEvent>? _suiviBoussole;
   bool _designation = false;
   StreamSubscription<Dessin>? _alertes;
   final _pointsTrace = <LatLng>[];
@@ -117,6 +123,7 @@ class _CarteScreenState extends State<CarteScreen> {
     _partage.chargerDessins();
     _alertes = _partage.nouveauxEnnemis.listen(_alerteEnnemi);
     _demarrerGeoloc();
+    _demarrerBoussole();
     _demarrerPartage();
     // Alerte de mise à jour désactivée : le dépôt GitHub est privé.
     // WidgetsBinding.instance
@@ -126,10 +133,25 @@ class _CarteScreenState extends State<CarteScreen> {
   @override
   void dispose() {
     _suivi?.cancel();
+    _suiviBoussole?.cancel();
     _alertes?.cancel();
     _partage.removeListener(_rafraichir);
     _partage.arreter();
     super.dispose();
+  }
+
+  /// La flèche « moi » suit la boussole du téléphone quand on est arrêté.
+  void _demarrerBoussole() {
+    if (kIsWeb) return;
+    _suiviBoussole = FlutterCompass.events?.listen((e) {
+      final h = e.heading;
+      if (h == null) return;
+      final avant = _boussole;
+      // On ne redessine que si l'écart dépasse 3°.
+      if (avant == null || ((h - avant + 540) % 360 - 180).abs() > 3) {
+        setState(() => _boussole = h);
+      }
+    }, onError: (_) {});
   }
 
   void _rafraichir() {
@@ -660,7 +682,7 @@ class _CarteScreenState extends State<CarteScreen> {
                     point: _maPosition!,
                     width: 40,
                     height: 40,
-                    child: FlecheMoi(cap: _monCap),
+                    child: FlecheMoi(cap: _monCap ?? _boussole),
                   ),
                 ]),
               if (_camaradeBulle case final c?)

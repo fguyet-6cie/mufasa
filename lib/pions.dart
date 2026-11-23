@@ -88,54 +88,44 @@ class PionAmi extends StatelessWidget {
   }
 }
 
-/// Ma position : flèche bleu marine dans un rond blanc, dans le sens de la
-/// marche ([cap] en degrés, null si je ne bouge pas).
+/// Ma position : flèche bleue qui s'oriente dans le sens de la marche, ou
+/// vers où pointe le téléphone quand je suis arrêté ([cap] en degrés).
 class FlecheMoi extends StatelessWidget {
   final double? cap;
   const FlecheMoi({super.key, this.cap});
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: 34,
-        height: 34,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(color: Color(0xFF0D2B6B), spreadRadius: 2),
-            BoxShadow(color: Colors.black38, blurRadius: 6),
-          ],
-        ),
-        child: Transform.rotate(
-          angle: (cap ?? 0) * math.pi / 180,
-          child: CustomPaint(painter: _Fleche(cap != null)),
-        ),
+  Widget build(BuildContext context) => Transform.rotate(
+        angle: (cap ?? 0) * math.pi / 180,
+        child: CustomPaint(size: const Size(40, 40), painter: _Fleche()),
       );
 }
 
+const bleuMoi = Color(0xFF1E88E5);
+
 class _Fleche extends CustomPainter {
-  final bool enMarche;
-  _Fleche(this.enMarche);
   @override
   void paint(Canvas canvas, Size s) {
     final c = Offset(s.width / 2, s.height / 2);
-    final p = Paint()..color = const Color(0xFF0D2B6B);
-    if (!enMarche) {
-      canvas.drawCircle(c, 7, p);
-      return;
-    }
+    final fleche = Path()
+      ..moveTo(c.dx, c.dy - 16)
+      ..lineTo(c.dx + 12, c.dy + 13)
+      ..lineTo(c.dx, c.dy + 7)
+      ..lineTo(c.dx - 12, c.dy + 13)
+      ..close();
+    canvas.drawShadow(fleche, Colors.black, 3, false);
+    canvas.drawPath(fleche, Paint()..color = bleuMoi);
     canvas.drawPath(
-        Path()
-          ..moveTo(c.dx, c.dy - 11)
-          ..lineTo(c.dx + 9, c.dy + 10)
-          ..lineTo(c.dx, c.dy + 5)
-          ..lineTo(c.dx - 9, c.dy + 10)
-          ..close(),
-        p);
+        fleche,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5
+          ..strokeJoin = StrokeJoin.round);
   }
 
   @override
-  bool shouldRepaint(_Fleche old) => old.enMarche != enMarche;
+  bool shouldRepaint(_Fleche old) => false;
 }
 
 /// Il y a combien de temps, en clair.
@@ -261,7 +251,8 @@ class Legende extends StatelessWidget {
           const Text('Mon trinôme'),
         ]),
         const Text('Chiffre = n° de section (chef de section) ou de GOLF.'),
-        const Text('Rond rouge = ennemi · losange orange = point particulier.'),
+        const Text(
+            'Flèche bleue = moi · rond rouge = ennemi · losange orange = point particulier.'),
       ],
     );
   }
