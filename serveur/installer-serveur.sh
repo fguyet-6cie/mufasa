@@ -29,6 +29,7 @@ EOF
 chmod 700 /usr/local/bin/mufasa-duckdns.sh
 echo "*/5 * * * * root /usr/local/bin/mufasa-duckdns.sh" > /etc/cron.d/mufasa-duckdns
 /usr/local/bin/mufasa-duckdns.sh || true
+grep -q OK /var/log/mufasa-duckdns.txt || echo "!! DuckDNS a répondu KO : vérifier le nom et le token (mettre l'adresse à la main sur duckdns.org en attendant)"
 
 # 2. Pare-feu interne du serveur (les images Oracle bloquent tout sauf SSH) :
 #    ouvre 80 (certificat) et 8883 (MQTT chiffré).
