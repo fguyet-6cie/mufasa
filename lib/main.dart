@@ -12,7 +12,6 @@ import 'accueil.dart';
 import 'cot.dart';
 import 'dessins.dart';
 import 'ennemi.dart';
-import 'mise_a_jour.dart';
 import 'graphiques.dart';
 import 'hierarchie.dart';
 import 'outils_dessin.dart';
@@ -109,8 +108,9 @@ class _CarteScreenState extends State<CarteScreen> {
     _alertes = _partage.nouveauxEnnemis.listen(_alerteEnnemi);
     _demarrerGeoloc();
     _demarrerPartage();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => proposerMiseAJour(context));
+    // Alerte de mise à jour désactivée : le dépôt GitHub est privé.
+    // WidgetsBinding.instance
+    //     .addPostFrameCallback((_) => proposerMiseAJour(context));
   }
 
   @override
