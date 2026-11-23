@@ -19,6 +19,9 @@ class CotEvenement {
 
   /// Précision horizontale en mètres (ce = circular error).
   final double precision;
+
+  /// Niveau de batterie du téléphone, en %, s'il est connu.
+  final int? batterie;
   final DateTime heure;
 
   /// Au-delà de cette heure, l'information est considérée périmée.
@@ -32,6 +35,7 @@ class CotEvenement {
     this.type = 'a-f-G-U-C',
     this.place = Place.inconnue,
     this.precision = 9999999,
+    this.batterie,
     DateTime? heure,
     DateTime? perime,
   })  : heure = (heure ?? DateTime.now()).toUtc(),
@@ -48,6 +52,7 @@ class CotEvenement {
     required double lat,
     required double lon,
     double? precision,
+    int? batterie,
     Place place = Place.inconnue,
   }) =>
       CotEvenement(
@@ -57,6 +62,7 @@ class CotEvenement {
         lat: lat,
         lon: lon,
         precision: precision ?? 9999999,
+        batterie: batterie,
       );
 
   String versXml() {
@@ -72,7 +78,8 @@ class CotEvenement {
         '<point lat="$lat" lon="$lon" hae="9999999.0" '
         'ce="${precision.toStringAsFixed(1)}" le="9999999.0"/>'
         '<detail><contact callsign="${e(indicatif)}"/>'
-        '<__mufasa ${place.versAttributs()}/></detail></event>';
+        '<__mufasa ${place.versAttributs()}'
+        '${batterie == null ? '' : ' batterie="$batterie"'}/></detail></event>';
   }
 
   /// Lit un message CoT. Renvoie null s'il est illisible ou sans position.
@@ -99,6 +106,7 @@ class CotEvenement {
         lat: lat,
         lon: lon,
         precision: double.tryParse(pt.getAttribute('ce') ?? '') ?? 9999999,
+        batterie: int.tryParse(m?.getAttribute('batterie') ?? ''),
         heure: DateTime.tryParse(ev.getAttribute('time') ?? ''),
         perime: DateTime.tryParse(ev.getAttribute('stale') ?? ''),
       );

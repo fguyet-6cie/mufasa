@@ -36,4 +36,15 @@ void main() {
     expect(CotEvenement.depuisXml('n\'importe quoi'), isNull);
     expect(CotEvenement.depuisXml('<event uid="x"/>'), isNull);
   });
+
+  test('la batterie circule avec la position', () {
+    final xml = CotEvenement.maPosition(
+            uid: 'A', indicatif: 'A', lat: 1, lon: 2, batterie: 17)
+        .versXml();
+    expect(CotEvenement.depuisXml(xml)!.batterie, 17);
+    final sans =
+        CotEvenement.maPosition(uid: 'B', indicatif: 'B', lat: 1, lon: 2)
+            .versXml();
+    expect(CotEvenement.depuisXml(sans)!.batterie, isNull);
+  });
 }

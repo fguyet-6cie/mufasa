@@ -26,4 +26,21 @@ void main() {
           reason: '$pos : $obtenu au lieu de $attendu');
     });
   });
+
+  test('MGRS tapé à la main → position, au mètre près', () {
+    references.forEach((pos, texte) {
+      final r = depuisMgrs(texte);
+      expect(r, isNotNull, reason: texte);
+      // 1 m ≈ 0,000009° de latitude ; on tolère 2 m.
+      expect(versMgrs(r!.$1, r.$2).substring(0, 6), texte.substring(0, 6));
+      expect((r.$1 - pos.$1).abs() < 2e-5, isTrue,
+          reason: '$texte → $r au lieu de $pos');
+      expect((r.$2 - pos.$2).abs() * 0.7 < 3e-5, isTrue,
+          reason: '$texte → $r au lieu de $pos');
+    });
+    expect(depuisMgrs('31udq4811'), isNotNull);
+    expect(depuisMgrs('31U DQ 4825111943'), isNotNull);
+    expect(depuisMgrs('bonjour'), isNull);
+    expect(depuisMgrs('31U DQ 123'), isNull);
+  });
 }

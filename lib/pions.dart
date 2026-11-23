@@ -177,6 +177,23 @@ class BulleAmi extends StatelessWidget {
                           text: mgrs,
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                     ])),
+                  if (c.batterie case final b?)
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(
+                          b <= 20
+                              ? Icons.battery_alert
+                              : b <= 50
+                                  ? Icons.battery_3_bar
+                                  : Icons.battery_full,
+                          size: 16,
+                          color: b <= 20
+                              ? const Color(0xFFC62828)
+                              : Colors.black87),
+                      Text(' Batterie : $b %',
+                          style: TextStyle(
+                              color: b <= 20 ? const Color(0xFFC62828) : null,
+                              fontWeight: b <= 20 ? FontWeight.bold : null)),
+                    ]),
                   Text('Position reçue ${ilYA(c.heure)}',
                       style: const TextStyle(color: Colors.black54)),
                 ],

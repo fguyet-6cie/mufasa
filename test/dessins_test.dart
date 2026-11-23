@@ -179,4 +179,17 @@ void main() {
     final disparu = e.plusLa(par: 'X', parUid: 'C');
     expect(ennemiProche([disparu], const LatLng(48.001, 2.001)), isNull);
   });
+
+  test('sans réseau, les envois attendent et sont gardés', () async {
+    SharedPreferences.setMockInitialValues({});
+    final p = Partage();
+    p.ajouterDessin(exemple('E1', forme: FormeDessin.ennemi));
+    p.ajouterDessin(exemple('E1', forme: FormeDessin.ennemi)); // même dessin
+    p.supprimerDessin('D2');
+    expect(p.nombreEnAttente, 2);
+    await Future.delayed(const Duration(milliseconds: 50));
+    final relu = Partage();
+    await relu.chargerDessins();
+    expect(relu.nombreEnAttente, 2);
+  });
 }

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -17,13 +18,21 @@ import 'dessins.dart';
 import 'ennemi.dart';
 import 'graphiques.dart';
 import 'hierarchie.dart';
+import 'cartes/cartes_hors_ligne.dart';
+import 'mgrs.dart';
+import 'mode_nuit.dart';
 import 'notifications.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
 import 'pions.dart';
 import 'reglages.dart';
 
-void main() => runApp(const MufasaApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await preparerCartes();
+  await chargerModeNuit();
+  runApp(const MufasaApp());
+}
 
 class MufasaApp extends StatefulWidget {
   const MufasaApp({super.key});
@@ -37,8 +46,18 @@ class _MufasaAppState extends State<MufasaApp> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: modeNuit,
+      builder: (context, nuit, _) => _app(nuit),
+    );
+  }
+
+  Widget _app(bool nuit) {
     return MaterialApp(
       title: 'MUFASA',
+      themeMode: nuit ? ThemeMode.dark : ThemeMode.light,
+      darkTheme: themeNuit,
+      builder: (context, enfant) => voileNuit(enfant!),
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -69,6 +88,13 @@ class FondIgn {
   final int zoomMax;
   const FondIgn(this.nom, this.couche, this.format, this.zoomMax);
 
+  String get extension => format == 'image/png' ? 'png' : 'jpg';
+
+  String urlTuile(int z, int x, int y) => url
+      .replaceAll('{z}', '$z')
+      .replaceAll('{x}', '$x')
+      .replaceAll('{y}', '$y');
+
   String get url => 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile'
       '&VERSION=1.0.0&LAYER=$couche&STYLE=normal&TILEMATRIXSET=PM'
       '&FORMAT=$format&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
@@ -91,6 +117,7 @@ class CarteScreen extends StatefulWidget {
 class _CarteScreenState extends State<CarteScreen> {
   final _carte = MapController();
   FondIgn _fond = fondsIgn.first;
+  final _fournisseurs = <String, TileProvider>{};
   LatLng? _maPosition;
   String? _message;
   StreamSubscription<Position>? _suivi;
@@ -139,6 +166,7 @@ class _CarteScreenState extends State<CarteScreen> {
   void dispose() {
     _suivi?.cancel();
     _suiviBoussole?.cancel();
+    _minuterieBatterie?.cancel();
     _cycle.dispose();
     _alertes?.cancel();
     _partage.removeListener(_rafraichir);
@@ -146,7 +174,24 @@ class _CarteScreenState extends State<CarteScreen> {
     super.dispose();
   }
 
+  Timer? _minuterieBatterie;
+
+  /// Lit le niveau de batterie maintenant puis toutes les 5 minutes.
+  void _suivreBatterie() {
+    if (kIsWeb) return;
+    Future<void> lire() async {
+      try {
+        _partage.batterie = await Battery().batteryLevel;
+      } catch (_) {}
+    }
+
+    lire();
+    _minuterieBatterie =
+        Timer.periodic(const Duration(minutes: 5), (_) => lire());
+  }
+
   Future<void> _demarrer() async {
+    _suivreBatterie();
     await _demarrerPartage();
     if (mounted) await expliquerAutorisations(context);
     await initialiserNotifications();
@@ -310,6 +355,8 @@ class _CarteScreenState extends State<CarteScreen> {
     await _suivi?.cancel();
     _suivi = null;
     await _partage.toutEffacer();
+    await effacerCartes();
+    await changerModeNuit(false);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Toutes les données de MUFASA ont été effacées.')));
@@ -547,6 +594,89 @@ class _CarteScreenState extends State<CarteScreen> {
     _abandonnerTrace();
   }
 
+  /// Télécharge la zone affichée, du zoom 10 au zoom 17, pour le fond choisi.
+  Future<void> _telechargerZone() async {
+    final b = _carte.camera.visibleBounds;
+    final no = b.northWest, se = b.southEast;
+    final fond = _fond;
+    const zMin = 10, zMax = 17;
+    final nombre = compterTuiles(no, se, zMin, zMax);
+    if (nombre > 25000) {
+      _info('Zone trop grande : zoome davantage avant de télécharger.');
+      return;
+    }
+    final mo = (nombre * (fond.extension == 'png' ? 0.02 : 0.03)).ceil();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.download, size: 36),
+        title: const Text('Télécharger la zone ?'),
+        content: Text('Fond : ${fond.nom}\n'
+            'Environ $mo Mo ($nombre morceaux de carte).\n\n'
+            'De préférence en Wi-Fi. Tu pourras ensuite voir cette zone '
+            'sans réseau, jusqu\'au niveau de détail d\'une rue.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Télécharger')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final faites = ValueNotifier<int>(0);
+    var annule = false;
+    final fenetre = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Téléchargement des cartes'),
+        content: ValueListenableBuilder<int>(
+          valueListenable: faites,
+          builder: (_, n, __) =>
+              Column(mainAxisSize: MainAxisSize.min, children: [
+            LinearProgressIndicator(value: n / nombre),
+            const SizedBox(height: 8),
+            Text('$n / $nombre'),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                annule = true;
+                Navigator.pop(ctx);
+              },
+              child: const Text('Arrêter')),
+        ],
+      ),
+    );
+    final echecs = await telechargerTuiles(
+      couche: fond.couche,
+      extension: fond.extension,
+      url: fond.urlTuile,
+      tuiles: tuilesZone(no, se, zMin, zMax),
+      progression: (n) => faites.value = n,
+      annule: () => annule,
+    );
+    if (!annule && mounted) Navigator.of(context).pop();
+    await fenetre;
+    faites.dispose();
+    if (!mounted) return;
+    _info(annule
+        ? 'Téléchargement arrêté. Ce qui est déjà téléchargé est gardé.'
+        : echecs == 0
+            ? 'Zone téléchargée : visible sans réseau.'
+            : 'Zone téléchargée, sauf $echecs morceaux (réseau ?). '
+                'Relance pour compléter.');
+  }
+
+  void _info(String texte) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texte)));
+  }
+
   Future<void> _ouvrirAffichage() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -627,6 +757,58 @@ class _CarteScreenState extends State<CarteScreen> {
                         RadioListTile<FondIgn>(value: f, title: Text(f.nom)),
                     ]),
                   ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.dark_mode_outlined),
+                    title: const Text('Mode nuit'),
+                    subtitle: const Text('Écran sombre et rouge, discret'),
+                    value: modeNuit.value,
+                    onChanged: (v) async {
+                      await changerModeNuit(v);
+                      if (mounted) setState(() {});
+                      maj(() {});
+                    },
+                  ),
+                  if (cartesHorsLigneDisponibles) ...[
+                    const Divider(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('Cartes hors ligne',
+                          style: Theme.of(ctx).textTheme.titleMedium),
+                    ),
+                    FutureBuilder<int>(
+                      future: tailleCartes(),
+                      builder: (_, t) => ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.sd_storage_outlined),
+                        title: Text(t.hasData
+                            ? '${(t.data! / 1e6).toStringAsFixed(0)} Mo de cartes gardées dans le téléphone'
+                            : '…'),
+                        subtitle: const Text(
+                            'Les cartes vues ou téléchargées restent '
+                            'visibles sans réseau.'),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Wrap(spacing: 8, children: [
+                        FilledButton.tonalIcon(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await _telechargerZone();
+                          },
+                          icon: const Icon(Icons.download),
+                          label: const Text('Télécharger la zone affichée'),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            await effacerCartes();
+                            maj(() {});
+                          },
+                          child: const Text('Effacer les cartes'),
+                        ),
+                      ]),
+                    ),
+                  ],
                   const Divider(),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -647,6 +829,64 @@ class _CarteScreenState extends State<CarteScreen> {
         ),
       ),
     );
+  }
+
+  /// Demande des coordonnées MGRS (ex. reçues à la radio) et centre la carte
+  /// dessus. Renvoie la position, ou null.
+  Future<LatLng?> _saisirMgrs() async {
+    final champ = TextEditingController();
+    String? erreur;
+    final r = await showDialog<LatLng>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, maj) {
+          void valider() {
+            final p = depuisMgrs(champ.text);
+            if (p == null) {
+              maj(() => erreur = 'Coordonnées non reconnues');
+            } else {
+              Navigator.pop(ctx, LatLng(p.$1, p.$2));
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Coordonnées MGRS'),
+            content: TextField(
+              controller: champ,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              autocorrect: false,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 18),
+              decoration: InputDecoration(
+                hintText: '31U DQ 48251 11943',
+                helperText: 'De 2 à 10 chiffres après les lettres',
+                errorText: erreur,
+              ),
+              onSubmitted: (_) => valider(),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Annuler')),
+              FilledButton(onPressed: valider, child: const Text('Placer')),
+            ],
+          );
+        },
+      ),
+    );
+    champ.dispose();
+    if (r != null) {
+      _carte.move(r, _carte.camera.zoom < 14 ? 14 : _carte.camera.zoom);
+    }
+    return r;
+  }
+
+  Future<void> _ajouterPointMgrs() async {
+    final p = await _saisirMgrs();
+    if (p == null || !mounted || !_enTrace) return;
+    setState(() => _pointsTrace.add(p));
+    final maxi = _pointsMaxi;
+    if (maxi != null && _pointsTrace.length >= maxi) _terminerTrace();
   }
 
   Widget _barreTrace() {
@@ -670,6 +910,10 @@ class _CarteScreenState extends State<CarteScreen> {
                 icon: const Icon(Icons.undo),
                 onPressed:
                     n == 0 ? null : () => setState(_pointsTrace.removeLast),
+              ),
+              TextButton(
+                onPressed: _ajouterPointMgrs,
+                child: const Text('MGRS'),
               ),
               const Spacer(),
               Text('$n point(s)'),
@@ -743,6 +987,12 @@ class _CarteScreenState extends State<CarteScreen> {
                 urlTemplate: _fond.url,
                 maxNativeZoom: _fond.zoomMax,
                 userAgentPackageName: 'fr.cie6.mufasa',
+                tileProvider: _fournisseurs.putIfAbsent(_fond.couche,
+                    () => fournisseurTuiles(_fond.couche, _fond.extension)),
+                tileBuilder: modeNuit.value
+                    ? (context, tuile, _) => ColorFiltered(
+                        colorFilter: filtreCarteNuit, child: tuile)
+                    : null,
               ),
               CoucheDessins(
                 dessins: _dessinsAffiches.toList(),
@@ -808,6 +1058,13 @@ class _CarteScreenState extends State<CarteScreen> {
                             onPressed: () => _signalerEnnemi(_maPosition!),
                             child: const Text('Il est sur ma position'),
                           ),
+                        TextButton(
+                          onPressed: () async {
+                            final p = await _saisirMgrs();
+                            if (p != null && _designation) _signalerEnnemi(p);
+                          },
+                          child: const Text('Saisir MGRS'),
+                        ),
                         TextButton(
                           onPressed: () => setState(() => _designation = false),
                           child: const Text('Annuler'),
@@ -953,6 +1210,7 @@ class _CarteScreenState extends State<CarteScreen> {
     final texte = l == null
         ? (_partage.avertissement ?? 'Partage désactivé')
         : '${l.nom} : ${l.etat.value} · ${_partage.camarades.length} camarade(s)';
+    final attente = _partage.nombreEnAttente;
     return Material(
       color: Colors.black.withValues(alpha: 0.7),
       borderRadius: BorderRadius.circular(16),
@@ -961,7 +1219,10 @@ class _CarteScreenState extends State<CarteScreen> {
         onTap: _ouvrirReglages,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(texte,
+          child: Text(
+              attente == 0
+                  ? texte
+                  : '$texte\n$attente envoi(s) en attente de réseau',
               style: const TextStyle(color: Colors.white, fontSize: 12)),
         ),
       ),

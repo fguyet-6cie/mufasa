@@ -35,6 +35,12 @@ class Partage extends ChangeNotifier {
   /// Dessins effacés : on les ignore s'ils reviennent.
   final _supprimes = <String>{};
 
+  /// Messages (ennemis, points, dessins, suppressions) pas encore partis faute
+  /// de réseau, rangés par dessin : on ne garde que la dernière version.
+  /// Ils partent dès que la liaison revient.
+  final _enAttente = <String, String>{};
+  int get nombreEnAttente => _enAttente.length;
+
   DateTime _dernierRenvoi = DateTime(2000);
 
   /// Prévient l'écran quand un camarade signale un nouvel ennemi.
@@ -46,6 +52,9 @@ class Partage extends ChangeNotifier {
   Reglages? _reglages;
   double? _lat, _lon, _precision;
   double? _latEnvoyee, _lonEnvoyee;
+
+  /// Niveau de batterie de ce téléphone (%), envoyé avec la position.
+  int? batterie;
   DateTime _dernierEnvoi = DateTime(2000);
 
   Liaison? get liaison => _liaison;
@@ -71,7 +80,7 @@ class Partage extends ChangeNotifier {
       uid: r.uid,
     );
     _ecoute = _liaison!.messages.listen(recevoir);
-    _liaison!.etat.addListener(notifyListeners);
+    _liaison!.etat.addListener(_etatChange);
     await _liaison!.demarrer();
     _minuterie = Timer.periodic(intervalle, (_) {
       if (_doitEnvoyer()) _envoyer();
@@ -82,13 +91,52 @@ class Partage extends ChangeNotifier {
     });
     _envoyer();
     _envoyerMesDessins();
+    _viderAttente();
     notifyListeners();
+  }
+
+  bool get _connectee => _liaison?.etat.value == 'connectée';
+
+  void _etatChange() {
+    // Le réseau revient : on envoie aussitôt ce qui attendait, et ma position.
+    if (_connectee) {
+      _viderAttente();
+      _envoyer();
+    }
+    notifyListeners();
+  }
+
+  /// Envoie un dessin (ou sa suppression) ; sans réseau, il attend.
+  void _envoyerDessin(String uid, String xml) {
+    if (_connectee) {
+      _liaison!.envoyer(xml);
+    } else {
+      _enAttente[uid] = xml;
+      _enregistrerAttente();
+      notifyListeners();
+    }
+  }
+
+  void _viderAttente() {
+    if (!_connectee || _enAttente.isEmpty) return;
+    for (final xml in _enAttente.values) {
+      _liaison!.envoyer(xml);
+    }
+    _enAttente.clear();
+    _enregistrerAttente();
+    notifyListeners();
+  }
+
+  Future<void> _enregistrerAttente() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('enAttente',
+        [for (final e in _enAttente.entries) '${e.key}\n${e.value}']);
   }
 
   Future<void> arreter() async {
     _minuterie?.cancel();
     await _ecoute?.cancel();
-    _liaison?.etat.removeListener(notifyListeners);
+    _liaison?.etat.removeListener(_etatChange);
     await _liaison?.arreter();
     _liaison = null;
     camarades.clear();
@@ -136,6 +184,7 @@ class Partage extends ChangeNotifier {
       lat: _lat!,
       lon: _lon!,
       precision: _precision,
+      batterie: batterie,
       place: r.place,
     ).versXml());
   }
@@ -221,13 +270,13 @@ class Partage extends ChangeNotifier {
   void ajouterDessin(Dessin d) {
     dessins[d.uid] = d;
     _enregistrerDessins();
-    _liaison?.envoyer(d.versXml());
+    _envoyerDessin(d.uid, d.versXml());
     notifyListeners();
   }
 
   void supprimerDessin(String uid) {
     _oublierDessin(uid);
-    _liaison?.envoyer(Dessin.suppressionXml(uid, _reglages?.uid ?? ''));
+    _envoyerDessin(uid, Dessin.suppressionXml(uid, _reglages?.uid ?? ''));
   }
 
   void _oublierDessin(String uid) {
@@ -239,7 +288,7 @@ class Partage extends ChangeNotifier {
   void _envoyerMesDessins() {
     _dernierRenvoi = DateTime.now();
     final moi = _reglages?.uid;
-    if (_liaison == null || moi == null) return;
+    if (!_connectee || moi == null) return;
     for (final d in dessins.values.where((d) => d.auteur == moi)) {
       _liaison!.envoyer(d.versXml());
     }
@@ -253,6 +302,7 @@ class Partage extends ChangeNotifier {
     _lat = _lon = _precision = null;
     dessins.clear();
     _supprimes.clear();
+    _enAttente.clear();
     camarades.clear();
     final p = await SharedPreferences.getInstance();
     await p.clear();
@@ -267,6 +317,10 @@ class Partage extends ChangeNotifier {
       if (d != null) dessins[d.uid] = d;
     }
     _supprimes.addAll(p.getStringList('dessinsSupprimes') ?? const []);
+    for (final e in p.getStringList('enAttente') ?? const <String>[]) {
+      final i = e.indexOf('\n');
+      if (i > 0) _enAttente[e.substring(0, i)] = e.substring(i + 1);
+    }
     notifyListeners();
   }
 
