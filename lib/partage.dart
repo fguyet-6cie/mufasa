@@ -1,5 +1,5 @@
 // Partage avec le groupe : envoie ma position régulièrement, garde la liste
-// des camarades reçus, et partage les dessins (calques).
+// des camarades reçus, et partage les dessins (points, dessins libres, ennemis).
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -29,8 +29,6 @@ class Partage extends ChangeNotifier {
   /// Dessins effacés : on les ignore s'ils reviennent.
   final _supprimes = <String>{};
 
-  /// Calques que l'utilisateur a choisi de masquer.
-  final calquesMasques = <String>{};
   DateTime _dernierRenvoi = DateTime(2000);
 
   /// Prévient l'écran quand un camarade signale un nouvel ennemi.
@@ -187,29 +185,10 @@ class Partage extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ----- Dessins et calques -----
-
-  /// Noms de tous les calques connus, « Général » en premier.
-  List<String> get calques {
-    final noms = {calqueParDefaut, ...dessins.values.map((d) => d.calque)};
-    return [
-      calqueParDefaut,
-      ...(noms..remove(calqueParDefaut)).toList()..sort()
-    ];
-  }
-
-  Iterable<Dessin> get dessinsVisibles =>
-      dessins.values.where((d) => !calquesMasques.contains(d.calque));
-
-  void basculerCalque(String calque, bool visible) {
-    visible ? calquesMasques.remove(calque) : calquesMasques.add(calque);
-    _enregistrerDessins();
-    notifyListeners();
-  }
+  // ----- Dessins -----
 
   void ajouterDessin(Dessin d) {
     dessins[d.uid] = d;
-    calquesMasques.remove(d.calque);
     _enregistrerDessins();
     _liaison?.envoyer(d.versXml());
     notifyListeners();
@@ -243,7 +222,6 @@ class Partage extends ChangeNotifier {
       if (d != null) dessins[d.uid] = d;
     }
     _supprimes.addAll(p.getStringList('dessinsSupprimes') ?? const []);
-    calquesMasques.addAll(p.getStringList('calquesMasques') ?? const []);
     notifyListeners();
   }
 
@@ -255,6 +233,5 @@ class Partage extends ChangeNotifier {
     final s = _supprimes.toList();
     await p.setStringList(
         'dessinsSupprimes', s.length > 500 ? s.sublist(s.length - 500) : s);
-    await p.setStringList('calquesMasques', calquesMasques.toList());
   }
 }

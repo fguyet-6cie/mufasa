@@ -12,13 +12,12 @@ import 'accueil.dart';
 import 'cot.dart';
 import 'dessins.dart';
 import 'ennemi.dart';
-import 'hierarchie.dart';
 import 'mise_a_jour.dart';
 import 'graphiques.dart';
+import 'hierarchie.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
 import 'reglages.dart';
-import 'symboles.dart';
 
 void main() => runApp(const MufasaApp());
 
@@ -94,14 +93,11 @@ class _CarteScreenState extends State<CarteScreen> {
   Reglages? _reglages;
 
   // Tracé en cours
-  ChoixOutil? _outil;
-  String _pion = '';
-  bool _departAuto = false;
+  FormeDessin? _outil;
   Dessin? _aDeplacer;
   bool _designation = false;
   StreamSubscription<Dessin>? _alertes;
   final _pointsTrace = <LatLng>[];
-  String _dernierCalque = calqueParDefaut;
 
   @override
   void initState() {
@@ -190,102 +186,39 @@ class _CarteScreenState extends State<CarteScreen> {
   Future<void> _commencerTrace() async {
     final outil = await choisirOutil(context);
     if (outil == null || !mounted) return;
-    var pion = '';
-    final depart = <LatLng>[];
-    final m = outil.mission;
-    if (m != null) {
-      final positions = <String, LatLng>{
-        if (_reglages != null && _maPosition != null)
-          _reglages!.indicatif: _maPosition!,
-        for (final c in _partage.camaradesVisibles)
-          c.indicatif: LatLng(c.lat, c.lon),
-        // Pions amis posés sur la carte (unités nommées).
-        for (final d in _partage.dessins.values)
-          if (d.forme == FormeDessin.symbole &&
-              d.nom.isNotEmpty &&
-              !estEnnemi(d.sidc) &&
-              symboleDuCode(d.sidc)?.famille == FamilleSymbole.unite)
-            d.nom: d.points.first,
-      };
-      final choisi = await choisirPion(context, m, positions.keys.toList());
-      if (choisi == null || !mounted) return;
-      pion = choisi;
-      // Les flèches et secteurs partent du pion, si on connaît sa position.
-      final pos = positions[pion];
-      if (pos != null &&
-          (m.trace == TraceMission.fleche || m.trace == TraceMission.secteur)) {
-        depart.add(pos);
-      }
-    }
     setState(() {
       _outil = outil;
-      _pion = pion;
-      _departAuto = depart.isNotEmpty;
-      _pointsTrace
-        ..clear()
-        ..addAll(depart);
+      _pointsTrace.clear();
     });
   }
 
-  int get _pointsMini =>
-      _outil?.modele?.points ??
-      switch (_outil?.forme) {
-        FormeDessin.point || FormeDessin.symbole || FormeDessin.ennemi => 1,
+  int get _pointsMini => switch (_outil) {
         FormeDessin.ligne => 2,
         FormeDessin.zone => 3,
-        FormeDessin.mission => _outil!.mission!.pointsMini,
-        null => 1,
+        _ => 1,
       };
 
-  int? get _pointsMaxi =>
-      _outil?.modele?.points ??
-      switch (_outil?.forme) {
-        FormeDessin.point || FormeDessin.symbole => 1,
-        FormeDessin.mission => _outil!.mission!.pointsMaxi,
-        _ => null,
-      };
+  int? get _pointsMaxi => _outil == FormeDessin.point ? 1 : null;
 
-  String get _consigne {
-    final o = _outil!;
-    final m = o.mission;
-    if (m != null && _departAuto && _pointsTrace.isNotEmpty) {
-      return m.trace == TraceMission.secteur
-          ? 'Départ posé sur le pion. Touchez la première limite, puis la seconde.'
-          : 'Départ posé sur le pion. Touchez le chemin jusqu\'à l\'objectif, puis Terminer.';
-    }
-    if (m != null) return m.consigne;
-    final mod = o.modele;
-    if (mod?.code == 'secteur_tir') {
-      return 'Touchez l\'arme, puis la première limite, puis la seconde.';
-    }
-    if (mod?.code == 'axe') {
-      return 'Touchez le départ de l\'axe, puis son tracé jusqu\'à la pointe.';
-    }
-    return switch (o.forme) {
-      FormeDessin.point => 'Touchez la carte pour placer le point.',
-      FormeDessin.symbole =>
-        'Touchez la carte pour poser : ${symboleDuCode(o.sidc)?.nom ?? 'symbole'}.',
-      FormeDessin.ligne =>
-        'Touchez la carte pour poser les points de la ligne.',
-      _ => 'Touchez la carte pour poser les coins de la zone.',
-    };
-  }
+  String get _consigne => switch (_outil) {
+        FormeDessin.point =>
+          'Touchez la carte pour placer le point particulier.',
+        FormeDessin.ligne =>
+          'Touchez la carte pour poser les points de la ligne.',
+        _ => 'Touchez la carte pour poser les coins de la zone.',
+      };
 
   Dessin? get _brouillon {
     final o = _outil;
     if (o == null || _pointsTrace.isEmpty) return null;
     return Dessin(
       uid: 'brouillon',
-      forme: o.forme,
+      forme: o,
       points: List.of(_pointsTrace),
       nom: '',
       couleur: Colors.blue,
-      calque: '',
       auteur: '',
       auteurIndicatif: '',
-      mission: o.mission?.code,
-      pion: _pion,
-      modele: o.modele?.code ?? '',
     );
   }
 
@@ -323,7 +256,6 @@ class _CarteScreenState extends State<CarteScreen> {
       points: [ou],
       nom: '',
       couleur: Colors.red.shade700,
-      calque: calqueEnnemis,
       auteur: _reglages?.uid ?? '',
       auteurIndicatif: _reglages?.indicatif ?? '',
       fiche: fiche,
@@ -348,7 +280,7 @@ class _CarteScreenState extends State<CarteScreen> {
       return;
     }
     final d = dessinTouche(
-        _carte.camera, _partage.dessinsVisibles, tap.relative ?? Offset.zero);
+        _carte.camera, _partage.dessins.values, tap.relative ?? Offset.zero);
     if (d != null) _ouvrirFiche(d);
   }
 
@@ -372,30 +304,15 @@ class _CarteScreenState extends State<CarteScreen> {
   Future<void> _terminerTrace() async {
     final o = _outil;
     if (o == null || _pointsTrace.length < _pointsMini) return;
-    final m = o.mission;
     final fin = await finaliserDessin(
       context,
-      titre: m != null
-          ? '${m.nom}${_pion.isEmpty ? '' : ' : $_pion'}'
-          : o.modele != null
-              ? o.modele!.nom
-              : switch (o.forme) {
-                  FormeDessin.symbole =>
-                    symboleDuCode(o.sidc)?.nom ?? 'Nouveau symbole',
-                  FormeDessin.point => 'Nouveau point',
-                  FormeDessin.ligne => 'Nouvelle ligne',
-                  _ => 'Nouvelle zone',
-                },
-      calques: _partage.calques,
-      calqueSuggere: _partage.calques.contains(_dernierCalque)
-          ? _dernierCalque
-          : calqueParDefaut,
+      titre: switch (o) {
+        FormeDessin.point => 'Point particulier',
+        FormeDessin.ligne => 'Nouvelle ligne',
+        _ => 'Nouvelle zone',
+      },
       couleurSuggeree: Colors.blue,
-      nomFacultatif: m != null || o.forme == FormeDessin.symbole,
-      avecCouleur: o.forme != FormeDessin.symbole,
-      exempleNom: o.forme == FormeDessin.symbole
-          ? 'ex. 1re SON, PC CIE'
-          : o.modele?.exemple,
+      avecObservations: o == FormeDessin.point,
     );
     if (!mounted) return;
     if (fin == null) {
@@ -406,19 +323,16 @@ class _CarteScreenState extends State<CarteScreen> {
     _partage.ajouterDessin(Dessin(
       uid:
           'MUFASA-D-${List.generate(10, (_) => r.nextInt(16).toRadixString(16)).join()}',
-      forme: o.forme,
+      forme: o,
       points: List.of(_pointsTrace),
       nom: fin.nom,
       couleur: fin.couleur,
-      calque: fin.calque,
       auteur: _reglages?.uid ?? '',
       auteurIndicatif: _reglages?.indicatif ?? '',
-      mission: m?.code,
-      pion: _pion,
-      sidc: o.sidc,
-      modele: o.modele?.code ?? '',
+      fiche: {
+        if (fin.observations.isNotEmpty) 'observations': fin.observations
+      },
     ));
-    _dernierCalque = fin.calque;
     _abandonnerTrace();
   }
 
@@ -426,73 +340,52 @@ class _CarteScreenState extends State<CarteScreen> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, maj) => SafeArea(
-          child: ConstrainedBox(
-            constraints:
-                BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                if (_reglages != null &&
-                    _reglages!.fonction.niveau >= 0 &&
-                    _reglages!.fonction.niveau < 4) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('Mes subordonnés : afficher jusqu\'aux…',
-                        style: Theme.of(ctx).textTheme.titleMedium),
-                  ),
-                  RadioGroup<int>(
-                    groupValue: _reglages!.profondeur
-                        .clamp(_reglages!.fonction.niveau + 1, 4),
-                    onChanged: (v) async {
-                      await _partage.choisirProfondeur(v!);
-                      maj(() {});
-                    },
-                    child: Column(children: [
-                      for (var n = _reglages!.fonction.niveau + 1; n <= 4; n++)
-                        RadioListTile<int>(
-                            value: n, title: Text(nomsNiveaux[n]!)),
-                    ]),
-                  ),
-                  const Divider(),
-                ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_reglages != null &&
+                  _reglages!.fonction.niveau >= 0 &&
+                  _reglages!.fonction.niveau < 4) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Fond de carte',
+                  child: Text('Mes subordonnés : afficher jusqu\'aux…',
                       style: Theme.of(ctx).textTheme.titleMedium),
                 ),
-                RadioGroup<FondIgn>(
-                  groupValue: _fond,
-                  onChanged: (f) {
-                    setState(() => _fond = f!);
+                RadioGroup<int>(
+                  groupValue: _reglages!.profondeur
+                      .clamp(_reglages!.fonction.niveau + 1, 4),
+                  onChanged: (v) async {
+                    await _partage.choisirProfondeur(v!);
                     maj(() {});
                   },
                   child: Column(children: [
-                    for (final f in fondsIgn)
-                      RadioListTile<FondIgn>(value: f, title: Text(f.nom)),
+                    for (var n = _reglages!.fonction.niveau + 1; n <= 4; n++)
+                      RadioListTile<int>(
+                          value: n, title: Text(nomsNiveaux[n]!)),
                   ]),
                 ),
                 const Divider(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Calques',
-                      style: Theme.of(ctx).textTheme.titleMedium),
-                ),
-                for (final c in _partage.calques)
-                  SwitchListTile(
-                    title: Text(c),
-                    subtitle: Text(
-                        '${_partage.dessins.values.where((d) => d.calque == c).length} dessin(s)'),
-                    value: !_partage.calquesMasques.contains(c),
-                    onChanged: (v) {
-                      _partage.basculerCalque(c, v);
-                      maj(() {});
-                    },
-                  ),
               ],
-            ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('Fond de carte',
+                    style: Theme.of(ctx).textTheme.titleMedium),
+              ),
+              RadioGroup<FondIgn>(
+                groupValue: _fond,
+                onChanged: (f) {
+                  setState(() => _fond = f!);
+                  maj(() {});
+                },
+                child: Column(children: [
+                  for (final f in fondsIgn)
+                    RadioListTile<FondIgn>(value: f, title: Text(f.nom)),
+                ]),
+              ),
+            ],
           ),
         ),
       ),
@@ -566,7 +459,7 @@ class _CarteScreenState extends State<CarteScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.layers),
-            tooltip: 'Fond de carte et calques',
+            tooltip: 'Fond de carte et niveaux',
             onPressed: _ouvrirCalques,
           ),
         ],
@@ -590,10 +483,9 @@ class _CarteScreenState extends State<CarteScreen> {
                 userAgentPackageName: 'fr.cie6.mufasa',
               ),
               CoucheDessins(
-                dessins: _partage.dessinsVisibles.toList(),
+                dessins: _partage.dessins.values.toList(),
                 brouillon: _brouillon,
               ),
-              coucheSymboles(_partage.dessinsVisibles),
               MarkerLayer(markers: [
                 for (final c in _partage.camaradesVisibles)
                   _marqueurCamarade(c),
@@ -683,10 +575,7 @@ class _CarteScreenState extends State<CarteScreen> {
                 elevation: 2,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Text(
-                    '${_outil!.mission?.nom ?? ''}${_pion.isEmpty ? '' : ' ($_pion)'}'
-                    '${_outil!.mission == null ? '' : '\n'}$_consigne',
-                  ),
+                  child: Text(_consigne),
                 ),
               ),
             ),
@@ -724,7 +613,7 @@ class _CarteScreenState extends State<CarteScreen> {
                 FloatingActionButton.small(
                   heroTag: 'dessiner',
                   onPressed: _commencerTrace,
-                  tooltip: 'Dessiner / mission',
+                  tooltip: 'Point particulier ou dessin',
                   child: const Icon(Icons.edit),
                 ),
                 const SizedBox(height: 12),

@@ -60,13 +60,13 @@ Future<void> afficherMiseAJour(BuildContext context, String tag) {
     builder: (ctx) => AlertDialog(
       icon: const Icon(Icons.system_update, size: 40),
       title: const Text('Nouvelle version disponible'),
-      content: Text(
-          'La version $tag de Mufasa est prête.\n\n'
+      content: Text('La version $tag de Mufasa est prête.\n\n'
           'Touche « Télécharger », puis ouvre le fichier mufasa.apk '
           'pour l\'installer. Tes réglages et tes dessins sont conservés.'),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx), child: const Text('Plus tard')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Plus tard')),
         FilledButton.icon(
           icon: const Icon(Icons.download),
           label: const Text('Télécharger'),

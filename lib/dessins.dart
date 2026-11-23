@@ -1,119 +1,12 @@
-// Dessins partagés sur la carte (points, lignes, zones), rangés en calques.
+// Dessins partagés sur la carte : points particuliers, dessins libres
+// (lignes, zones) et ennemis signalés.
 // Ils circulent au format CoT, comme les positions, pour rester compatibles
 // avec les autres outils de situation tactique.
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:xml/xml.dart';
 
-import 'symboles.dart';
-
-enum FormeDessin { point, ligne, zone, mission, symbole, ennemi }
-
-/// Comment un graphique de mission est tracé.
-enum TraceMission {
-  /// Flèche du pion vers l'objectif (2 points ou plus).
-  fleche,
-
-  /// Secteur : du pion vers deux limites (3 points : pion, limite 1, limite 2).
-  /// Deux traits à pointe ouverte, avec la lettre sur chaque trait.
-  secteur,
-
-  /// Arc presque fermé autour de l'objectif (centre puis bord).
-  boucle,
-
-  /// Grande croix sur l'objectif (centre puis taille).
-  croix,
-}
-
-enum StyleTrait { plein, tirets, pointilles, zigzag }
-
-class Mission {
-  final String code;
-  final String nom;
-  final String lettre;
-  final TraceMission trace;
-  final StyleTrait style;
-  final bool pointePleine;
-  const Mission(this.code, this.nom, this.lettre, this.trace,
-      {this.style = StyleTrait.plein, this.pointePleine = false});
-
-  int get pointsMini => trace == TraceMission.secteur ? 3 : 2;
-  int? get pointsMaxi => switch (trace) {
-        TraceMission.secteur => 3,
-        TraceMission.boucle || TraceMission.croix => 2,
-        TraceMission.fleche => null,
-      };
-
-  /// Consigne affichée pendant le tracé.
-  String get consigne => switch (trace) {
-        TraceMission.fleche =>
-          'Touchez le départ (le pion), puis le chemin jusqu\'à l\'objectif.',
-        TraceMission.secteur =>
-          'Touchez le pion, puis la première limite, puis la seconde.',
-        TraceMission.boucle =>
-          'Touchez le centre de l\'objectif, puis le bord du bouclage.',
-        TraceMission.croix =>
-          'Touchez le centre de l\'objectif, puis la taille de la croix.',
-      };
-}
-
-/// Graphiques de mission, alignés sur la liste de symboles validée avec Fred
-/// (inspirés de l'APP-6 ; « Reconnaître » et « Éclairer » n'y ont pas
-/// d'équivalent exact).
-const missions = <Mission>[
-  Mission('attaquer', 'Attaquer', '', TraceMission.fleche, pointePleine: true),
-  Mission('fixer', 'Fixer', 'F', TraceMission.fleche,
-      style: StyleTrait.zigzag, pointePleine: true),
-  Mission('detruire', 'Détruire', 'D', TraceMission.croix),
-  Mission('boucler', 'Boucler', 'I', TraceMission.boucle),
-  Mission('couvrir', 'Couvrir', 'C', TraceMission.secteur),
-  Mission('surveiller', 'Surveiller', 'S', TraceMission.secteur),
-  Mission('reconnaitre', 'Reconnaître', 'RECO', TraceMission.fleche,
-      style: StyleTrait.tirets),
-  Mission('eclairer', 'Éclairer', 'ECL', TraceMission.fleche,
-      style: StyleTrait.pointilles),
-];
-
-/// Lignes et zones de la liste validée (tracées par l'appli).
-class Modele {
-  final String code;
-  final String nom;
-
-  /// Sigle affiché sur le tracé (ex. « LD », « OBJ »).
-  final String sigle;
-  final FormeDessin forme;
-
-  /// Nombre de points imposé (null = libre).
-  final int? points;
-  final String exemple;
-  const Modele(this.code, this.nom, this.sigle, this.forme,
-      {this.points, this.exemple = ''});
-}
-
-const modeles = <Modele>[
-  Modele('limite', 'Limite', '', FormeDessin.ligne,
-      exemple: 'ex. 1re SON / 2e SON'),
-  Modele('ld', 'Ligne de débouché', 'LD', FormeDessin.ligne,
-      exemple: 'ex. BLEUE'),
-  Modele('pl', 'Ligne de coordination', 'PL', FormeDessin.ligne,
-      exemple: 'ex. ROUGE'),
-  Modele('itineraire', 'Itinéraire', 'ITI', FormeDessin.ligne,
-      exemple: 'ex. FER'),
-  Modele('axe', 'Axe d\'effort', '', FormeDessin.ligne, exemple: 'ex. 1re SON'),
-  Modele('barbeles', 'Réseau de barbelés', '', FormeDessin.ligne),
-  Modele('objectif', 'Objectif', 'OBJ', FormeDessin.zone, exemple: 'ex. LION'),
-  Modele('regroupement', 'Zone de regroupement', 'ZR', FormeDessin.zone,
-      exemple: 'ex. 1'),
-  Modele('champ_mines', 'Champ de mines', '', FormeDessin.zone),
-  Modele('secteur_tir', 'Secteur de tir', 'ST', FormeDessin.ligne,
-      points: 3, exemple: 'ex. MIT 1'),
-];
-
-Modele? modeleParCode(String? code) =>
-    modeles.where((m) => m.code == code).firstOrNull;
-
-Mission? missionParCode(String? code) =>
-    missions.where((m) => m.code == code).firstOrNull;
+enum FormeDessin { point, ligne, zone, ennemi }
 
 /// Couleurs proposées pour dessiner.
 const couleursDessin = <String, Color>{
@@ -125,9 +18,6 @@ const couleursDessin = <String, Color>{
   'Violet': Colors.purple,
   'Noir': Colors.black,
 };
-
-const calqueParDefaut = 'Général';
-const calqueEnnemis = 'Ennemis signalés';
 
 /// Rubriques de la fiche de désignation d'un ennemi, dans l'ordre d'affichage.
 const rubriquesEnnemi = <String, String>{
@@ -150,39 +40,23 @@ class Dessin {
   final List<LatLng> points;
   final String nom;
   final Color couleur;
-  final String calque;
   final String auteur; // uid du téléphone qui l'a dessiné
   final String auteurIndicatif;
   final DateTime heure;
 
-  /// Pour un graphique de mission : code de la mission et pion concerné.
-  final String? mission;
-  final String pion;
-
-  /// Pour un symbole OTAN posé sur la carte : son code SIDC.
-  final String sidc;
-
-  /// Pour une ligne ou une zone de la liste : code du modèle (ex. « ld »).
-  final String modele;
-  Modele? get leModele => modeleParCode(modele);
-
-  /// Pour un ennemi signalé : les informations remplies par l'observateur.
+  /// Ennemi signalé : les informations remplies par l'observateur.
+  /// Point particulier : ses observations (clé « observations »).
   final Map<String, String> fiche;
 
-  Mission? get laMission => missionParCode(mission);
+  String get observations => fiche['observations'] ?? '';
 
   Dessin({
-    this.mission,
-    this.pion = '',
-    this.sidc = '',
     this.fiche = const {},
-    this.modele = '',
     required this.uid,
     required this.forme,
     required this.points,
     required this.nom,
     required this.couleur,
-    required this.calque,
     required this.auteur,
     required this.auteurIndicatif,
     DateTime? heure,
@@ -211,14 +85,9 @@ class Dessin {
       ],
       nom: nom,
       couleur: couleur,
-      calque: calque,
       auteur: par,
       auteurIndicatif: auteurIndicatif,
-      mission: mission,
-      pion: pion,
-      sidc: sidc,
       fiche: fiche,
-      modele: modele,
     );
   }
 
@@ -226,7 +95,6 @@ class Dessin {
   /// (une zone est un tracé fermé : son premier point est répété à la fin).
   String get typeCot => switch (forme) {
         FormeDessin.point => 'b-m-p-s-m',
-        FormeDessin.symbole => typeCotDuSymbole(sidc),
         FormeDessin.ennemi => 'a-h-G',
         _ => 'u-d-f',
       };
@@ -262,11 +130,11 @@ class Dessin {
           if ((fiche[e.key] ?? '').isNotEmpty) '${e.value} : ${fiche[e.key]}'
       ].join(' / ');
       b.write('<remarks>${_e(resume)}</remarks>');
-    } else if (forme == FormeDessin.symbole) {
-      // Code du symbole, lisible par d'autres outils compatibles.
-      b.write('<__milsym id="${_e(sidc)}"/>');
     } else if (forme == FormeDessin.point) {
       b.write('<color argb="$argb"/>');
+      if (observations.isNotEmpty) {
+        b.write('<remarks>${_e(observations)}</remarks>');
+      }
     } else {
       final liste = [...points, if (forme == FormeDessin.zone) points.first];
       for (final p in liste) {
@@ -284,13 +152,7 @@ class Dessin {
     b
       ..write('<link uid="${_e(auteur)}" relation="p-p" type="a-f-G-U-C" ')
       ..write('parent_callsign="${_e(auteurIndicatif)}"/>')
-      ..write('<__mufasa calque="${_e(calque)}" forme="${forme.name}"')
-      ..write(mission == null
-          ? ''
-          : ' mission="${_e(mission!)}" pion="${_e(pion)}"')
-      ..write(sidc.isEmpty ? '' : ' sidc="${_e(sidc)}"')
-      ..write(modele.isEmpty ? '' : ' modele="${_e(modele)}"')
-      ..write('/>')
+      ..write('<__mufasa forme="${forme.name}"/>')
       ..write('</detail></event>');
     return b.toString();
   }
@@ -304,13 +166,16 @@ class Dessin {
       final detail = ev.getElement('detail');
       if (uid == null || detail == null) return null;
       final mufasa = detail.getElement('__mufasa');
-      final sidc = mufasa?.getAttribute('sidc') ?? '';
-      final estSymbole = sidc.isNotEmpty;
-      final estEnnemi = mufasa?.getAttribute('forme') == 'ennemi';
-      if (!estSymbole &&
-          !estEnnemi &&
-          !type.startsWith('b-m-p') &&
-          type != 'u-d-f') {
+      final declare = mufasa?.getAttribute('forme');
+      // Anciennes versions : missions et symboles OTAN ne sont plus gérés.
+      if (declare == 'mission' ||
+          declare == 'symbole' ||
+          mufasa?.getAttribute('mission') != null ||
+          mufasa?.getAttribute('sidc') != null) {
+        return null;
+      }
+      final estEnnemi = declare == 'ennemi';
+      if (!estEnnemi && !type.startsWith('b-m-p') && type != 'u-d-f') {
         return null;
       }
       final nom = detail.getElement('contact')?.getAttribute('callsign') ?? '';
@@ -326,13 +191,9 @@ class Dessin {
       FormeDessin forme;
       List<LatLng> points;
       Color couleur;
-      if (estSymbole || estEnnemi || type.startsWith('b-m-p')) {
+      if (estEnnemi || type.startsWith('b-m-p')) {
         final pt = ev.getElement('point')!;
-        forme = estEnnemi
-            ? FormeDessin.ennemi
-            : estSymbole
-                ? FormeDessin.symbole
-                : FormeDessin.point;
+        forme = estEnnemi ? FormeDessin.ennemi : FormeDessin.point;
         points = [
           LatLng(double.parse(pt.getAttribute('lat')!),
               double.parse(pt.getAttribute('lon')!))
@@ -348,35 +209,28 @@ class Dessin {
         ];
         if (points.length < 2) return null;
         final ferme = points.length > 3 && points.first == points.last;
-        final declare = mufasa?.getAttribute('forme');
-        forme = declare == 'mission' || mufasa?.getAttribute('mission') != null
-            ? FormeDessin.mission
-            : declare == 'zone' || (declare == null && ferme)
-                ? FormeDessin.zone
-                : FormeDessin.ligne;
+        forme = declare == 'zone' || (declare == null && ferme)
+            ? FormeDessin.zone
+            : FormeDessin.ligne;
         if (forme == FormeDessin.zone && ferme) points.removeLast();
         couleur = lireCouleur(
             detail.getElement('strokeColor')?.getAttribute('value'),
             Colors.red);
       }
+      final remarques = detail.getElement('remarks')?.innerText ?? '';
       return Dessin(
-        mission: forme == FormeDessin.mission
-            ? mufasa?.getAttribute('mission')
-            : null,
-        pion: mufasa?.getAttribute('pion') ?? '',
-        sidc: sidc,
-        modele: mufasa?.getAttribute('modele') ?? '',
-        fiche: {
-          for (final c in detail.findElements('__champ'))
-            if (c.getAttribute('cle') case final cle?)
-              cle: c.getAttribute('valeur') ?? '',
-        },
+        fiche: forme == FormeDessin.point
+            ? {if (remarques.isNotEmpty) 'observations': remarques}
+            : {
+                for (final c in detail.findElements('__champ'))
+                  if (c.getAttribute('cle') case final cle?)
+                    cle: c.getAttribute('valeur') ?? '',
+              },
         uid: uid,
         forme: forme,
         points: points,
         nom: nom,
         couleur: couleur.withValues(alpha: 1),
-        calque: mufasa?.getAttribute('calque') ?? calqueParDefaut,
         auteur: parent?.getAttribute('uid') ?? '',
         auteurIndicatif: parent?.getAttribute('parent_callsign') ?? '',
         heure: DateTime.tryParse(ev.getAttribute('time') ?? ''),

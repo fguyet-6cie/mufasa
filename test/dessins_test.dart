@@ -7,40 +7,41 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Dessin exemple(String uid,
         {FormeDessin forme = FormeDessin.ligne,
-        String? mission,
-        String calque = 'Phase 1',
+        Map<String, String> fiche = const {},
         String auteur = 'AUTRE'}) =>
     Dessin(
       uid: uid,
       forme: forme,
-      points: const [LatLng(48, 2), LatLng(48.01, 2.01), LatLng(48.02, 2)],
+      points: forme == FormeDessin.point
+          ? const [LatLng(48, 2)]
+          : const [LatLng(48, 2), LatLng(48.01, 2.01), LatLng(48.02, 2)],
       nom: 'OBJ <LION>',
       couleur: Colors.red,
-      calque: calque,
       auteur: auteur,
       auteurIndicatif: 'ALPHA',
-      mission: mission,
-      pion: mission == null ? '' : '2e SECTION',
+      fiche: fiche,
     );
 
 void main() {
-  test('chaque forme de dessin se relit à l\'identique', () {
-    for (final f in FormeDessin.values
-        .where((f) => f != FormeDessin.symbole && f != FormeDessin.ennemi)) {
-      final d = exemple('D-$f',
-          forme: f, mission: f == FormeDessin.mission ? 'attaquer' : null);
-      final lu = Dessin.depuisXml(d.versXml())!;
+  test('point, ligne et zone se relisent à l\'identique', () {
+    for (final f in [FormeDessin.point, FormeDessin.ligne, FormeDessin.zone]) {
+      final lu = Dessin.depuisXml(exemple('D-$f', forme: f).versXml())!;
       expect(lu.forme, f);
       expect(lu.nom, 'OBJ <LION>');
-      expect(lu.calque, 'Phase 1');
       expect(lu.auteurIndicatif, 'ALPHA');
       expect(lu.couleur.toARGB32(), Colors.red.toARGB32());
       expect(lu.points.length, f == FormeDessin.point ? 1 : 3);
-      if (f == FormeDessin.mission) {
-        expect(lu.laMission!.nom, 'Attaquer');
-        expect(lu.pion, '2e SECTION');
-      }
     }
+  });
+
+  test('un point particulier garde ses observations', () {
+    final d = exemple('P1', forme: FormeDessin.point, fiche: const {
+      'observations': 'Pont détruit, gué à 200 m "nord" & sec'
+    });
+    final xml = d.versXml();
+    expect(xml, contains('<remarks>'));
+    final lu = Dessin.depuisXml(xml)!;
+    expect(lu.observations, 'Pont détruit, gué à 200 m "nord" & sec');
   });
 
   test('une zone est un tracé fermé lisible par d\'autres outils', () {
@@ -49,8 +50,15 @@ void main() {
     expect(xml, contains('type="u-d-f"'));
   });
 
-  test('toutes les missions ont un code unique', () {
-    expect(missions.map((m) => m.code).toSet().length, missions.length);
+  test('les missions et symboles des anciennes versions sont ignorés', () {
+    const ancien =
+        '<event version="2.0" uid="M1" type="u-d-f" time="2026-11-21T10:00:00Z" '
+        'start="2026-11-21T10:00:00Z" stale="2026-12-21T10:00:00Z">'
+        '<point lat="48" lon="2" hae="0" ce="0" le="0"/><detail>'
+        '<link point="48,2"/><link point="48.1,2"/>'
+        '<__mufasa calque="Général" forme="mission" mission="attaquer"/>'
+        '</detail></event>';
+    expect(Dessin.depuisXml(ancien), isNull);
   });
 
   test('un ordre de suppression se relit', () {
@@ -58,15 +66,11 @@ void main() {
     expect(Dessin.lireSuppression(exemple('X').versXml()), isNull);
   });
 
-  test('partage : réception, calques masqués, suppression définitive',
-      () async {
+  test('partage : réception et suppression définitive', () async {
     SharedPreferences.setMockInitialValues({});
     final p = Partage();
     p.recevoir(exemple('D1').versXml());
-    p.recevoir(exemple('D2', calque: 'Phase 2').versXml());
-    expect(p.calques, ['Général', 'Phase 1', 'Phase 2']);
-    p.basculerCalque('Phase 2', false);
-    expect(p.dessinsVisibles.map((d) => d.uid), ['D1']);
+    p.recevoir(exemple('D2').versXml());
     p.recevoir(Dessin.suppressionXml('D1', 'AUTRE'));
     expect(p.dessins.keys, ['D2']);
     // Le dessin effacé revient (renvoyé par un retardataire) : il est ignoré.
@@ -76,14 +80,12 @@ void main() {
 
   test('les dessins sont gardés dans le téléphone', () async {
     SharedPreferences.setMockInitialValues({});
-    final p = Partage()
-      ..ajouterDessin(
-          exemple('D9', forme: FormeDessin.mission, mission: 'boucler'));
+    Partage().ajouterDessin(exemple('D9',
+        forme: FormeDessin.point, fiche: const {'observations': 'RAS'}));
     await Future.delayed(const Duration(milliseconds: 50));
     final q = Partage();
     await q.chargerDessins();
-    expect(q.dessins['D9']!.laMission!.nom, 'Boucler');
-    expect(p.dessins.length, 1);
+    expect(q.dessins['D9']!.observations, 'RAS');
   });
 
   test('un ennemi signalé se relit avec sa fiche et prévient les autres',
@@ -95,7 +97,6 @@ void main() {
       points: const [LatLng(48, 2)],
       nom: '',
       couleur: Colors.red,
-      calque: calqueEnnemis,
       auteur: 'AUTRE',
       auteurIndicatif: 'BRAVO 2',
       fiche: const {
@@ -118,24 +119,5 @@ void main() {
     expect((await alerte).uid, 'E1');
     expect(p.camarades, isEmpty); // pas pris pour un camarade
     expect(p.dessins.keys, ['E1']);
-  });
-
-  test('les lignes et zones de la liste gardent leur modèle', () {
-    for (final m in modeles) {
-      final d = Dessin(
-        uid: 'L-${m.code}',
-        forme: m.forme,
-        points: const [LatLng(48, 2), LatLng(48.01, 2.01), LatLng(48.02, 2)],
-        nom: 'BLEUE',
-        couleur: Colors.blue,
-        calque: 'Phase 1',
-        auteur: 'A',
-        auteurIndicatif: 'A',
-        modele: m.code,
-      );
-      final lu = Dessin.depuisXml(d.versXml())!;
-      expect(lu.leModele?.nom, m.nom);
-      expect(lu.forme, m.forme);
-    }
   });
 }

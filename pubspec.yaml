@@ -42,7 +42,6 @@ dependencies:
   mqtt_client: ^10.14.0
   cryptography: ^2.9.0
   typed_data: ^1.4.0
-  flutter_svg: ^2.5.0
   package_info_plus: ^10.2.2
   url_launcher: ^6.3.3
   http: ^1.6.0
@@ -70,7 +69,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/symboles/
     - assets/images/
 
   # To add assets to your application, add an assets section, like this:
