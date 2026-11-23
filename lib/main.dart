@@ -977,6 +977,9 @@ class _CarteScreenState extends State<CarteScreen> {
             options: MapOptions(
               initialCenter: const LatLng(46.6, 2.4), // centre de la France
               initialZoom: 6,
+              backgroundColor: modeNuit.value
+                  ? const Color(0xFF140303)
+                  : const Color(0xFFE0E0E0),
               onTap: _toucherCarte,
               // Pas de rotation : le nord reste en haut.
               interactionOptions: const InteractionOptions(
