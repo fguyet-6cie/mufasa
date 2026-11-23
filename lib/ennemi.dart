@@ -11,13 +11,7 @@ const naturesEnnemi = [
   'Drone',
   'Inconnu',
 ];
-const attitudesEnnemi = [
-  'Statique',
-  'En mouvement',
-  'Défend',
-  'Attaque',
-  'Inconnue',
-];
+const attitudesEnnemi = ['Statique', 'En mouvement'];
 
 String heureCourte(DateTime d) {
   final l = d.toLocal();
@@ -50,7 +44,7 @@ class _FicheEnnemiEtat extends State<_FicheEnnemi> {
   final _materiels = TextEditingController();
   final _remarques = TextEditingController();
   String _nature = 'Inconnu';
-  String _attitude = 'Inconnue';
+  String _attitude = 'Statique';
   String? _cap;
 
   @override
