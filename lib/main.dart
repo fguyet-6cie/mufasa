@@ -16,6 +16,7 @@ import 'dessins.dart';
 import 'ennemi.dart';
 import 'graphiques.dart';
 import 'hierarchie.dart';
+import 'notifications.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
 import 'pions.dart';
@@ -112,6 +113,10 @@ class _CarteScreenState extends State<CarteScreen> {
   /// Direction vers laquelle pointe le téléphone (boussole), en degrés.
   double? _boussole;
   StreamSubscription<CompassEvent>? _suiviBoussole;
+
+  /// Vrai quand l'appli n'est pas à l'écran (écran éteint, autre appli).
+  bool _enArrierePlan = false;
+  late final AppLifecycleListener _cycle;
   bool _designation = false;
   StreamSubscription<Dessin>? _alertes;
   final _pointsTrace = <LatLng>[];
@@ -122,9 +127,8 @@ class _CarteScreenState extends State<CarteScreen> {
     _partage.addListener(_rafraichir);
     _partage.chargerDessins();
     _alertes = _partage.nouveauxEnnemis.listen(_alerteEnnemi);
-    _demarrerGeoloc();
-    _demarrerBoussole();
-    _demarrerPartage();
+    _cycle = AppLifecycleListener(onStateChange: _changementEtat);
+    _demarrer();
     // Alerte de mise à jour désactivée : le dépôt GitHub est privé.
     // WidgetsBinding.instance
     //     .addPostFrameCallback((_) => proposerMiseAJour(context));
@@ -134,15 +138,37 @@ class _CarteScreenState extends State<CarteScreen> {
   void dispose() {
     _suivi?.cancel();
     _suiviBoussole?.cancel();
+    _cycle.dispose();
     _alertes?.cancel();
     _partage.removeListener(_rafraichir);
     _partage.arreter();
     super.dispose();
   }
 
+  Future<void> _demarrer() async {
+    await _demarrerPartage();
+    if (mounted) await expliquerAutorisations(context);
+    await initialiserNotifications();
+    await _demarrerGeoloc();
+    _demarrerBoussole();
+  }
+
+  /// Écran éteint : on coupe la boussole (inutile) pour économiser la batterie.
+  void _changementEtat(AppLifecycleState e) {
+    final arriere = e != AppLifecycleState.resumed;
+    if (arriere == _enArrierePlan) return;
+    _enArrierePlan = arriere;
+    if (arriere) {
+      _suiviBoussole?.cancel();
+      _suiviBoussole = null;
+    } else {
+      _demarrerBoussole();
+    }
+  }
+
   /// La flèche « moi » suit la boussole du téléphone quand on est arrêté.
   void _demarrerBoussole() {
-    if (kIsWeb) return;
+    if (kIsWeb || _suiviBoussole != null) return;
     _suiviBoussole = FlutterCompass.events?.listen((e) {
       final h = e.heading;
       if (h == null) return;
@@ -162,7 +188,7 @@ class _CarteScreenState extends State<CarteScreen> {
     _reglages = await Reglages.charger();
     await _partage.demarrer(_reglages!);
     // Au premier lancement, on demande l'indicatif.
-    if (_reglages!.indicatif == 'Sans nom' && mounted) _ouvrirReglages();
+    if (_reglages!.indicatif == 'Sans nom' && mounted) await _ouvrirReglages();
   }
 
   Future<void> _ouvrirReglages() async {
@@ -172,6 +198,43 @@ class _CarteScreenState extends State<CarteScreen> {
       MaterialPageRoute(builder: (_) => ReglagesScreen(reglages: _reglages!)),
     );
     if (change == true) await _partage.demarrer(_reglages!);
+  }
+
+  /// Réglages du GPS : économes, et actifs même écran éteint (notification
+  /// permanente sur Android, pastille bleue sur iPhone).
+  static LocationSettings reglagesGps({bool wifi = false}) {
+    const metres = 10; // nouvelle position seulement après 10 m
+    if (kIsWeb) {
+      return const LocationSettings(
+          accuracy: LocationAccuracy.high, distanceFilter: metres);
+    }
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => AndroidSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: metres,
+          intervalDuration: const Duration(seconds: 10),
+          foregroundNotificationConfig: ForegroundNotificationConfig(
+            notificationTitle: 'MUFASA',
+            notificationText: 'MUFASA partage ta position',
+            notificationChannelName: 'Partage de position',
+            setOngoing: true,
+            // Garde le téléphone éveillé juste assez pour envoyer la position
+            // et recevoir les alertes écran éteint.
+            enableWakeLock: true,
+            enableWifiLock: wifi,
+          ),
+        ),
+      TargetPlatform.iOS => AppleSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: metres,
+          activityType: ActivityType.fitness,
+          pauseLocationUpdatesAutomatically: false,
+          showBackgroundLocationIndicator: true,
+          allowBackgroundLocationUpdates: true,
+        ),
+      _ => const LocationSettings(
+          accuracy: LocationAccuracy.high, distanceFilter: metres),
+    };
   }
 
   Future<void> _demarrerGeoloc() async {
@@ -190,10 +253,7 @@ class _CarteScreenState extends State<CarteScreen> {
     }
     setState(() => _message = null);
     _suivi = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5, // mise à jour tous les 5 m
-      ),
+      locationSettings: reglagesGps(wifi: _reglages?.mode == ModePartage.wifi),
     ).listen((p) {
       final pos = LatLng(p.latitude, p.longitude);
       _partage.majPosition(p.latitude, p.longitude, p.accuracy);
@@ -302,6 +362,17 @@ class _CarteScreenState extends State<CarteScreen> {
   // ----- Désignation d'un ennemi -----
 
   void _alerteEnnemi(Dessin d) {
+    if (_enArrierePlan) {
+      final f = d.fiche;
+      final quoi = [f['volume'], f['nature']]
+          .where((t) => t != null && t.isNotEmpty)
+          .join(' · ');
+      final ou = _maPosition == null
+          ? ''
+          : ' à ${const Distance()(_maPosition!, d.points.first).round()} m';
+      notifierEnnemi('Ennemi signalé$ou',
+          '${quoi.isEmpty ? '' : '$quoi, '}par ${f['observateur'] ?? d.auteurIndicatif}');
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       backgroundColor: Colors.red.shade800,

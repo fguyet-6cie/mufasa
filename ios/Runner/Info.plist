@@ -2,8 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>MUFASA partage votre position avec votre compagnie, y compris écran éteint.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Mufasa affiche votre position sur la carte et la partage avec votre groupe.</string>
+	<string>MUFASA affiche votre position sur la carte et la partage avec votre groupe.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Mufasa échange les positions avec les autres téléphones du même réseau Wi-Fi.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

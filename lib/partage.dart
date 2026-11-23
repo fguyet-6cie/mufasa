@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cot.dart';
@@ -12,8 +13,13 @@ import 'reglages.dart';
 import 'reseau/liaison.dart';
 
 class Partage extends ChangeNotifier {
-  /// Fréquence d'envoi de ma position.
+  /// Fréquence d'envoi de ma position quand je bouge.
   static const intervalle = Duration(seconds: 10);
+
+  /// Immobile (moins de [deplacementMin] mètres), on n'envoie qu'à ce rythme,
+  /// pour économiser la batterie et le forfait.
+  static const intervalleImmobile = Duration(seconds: 60);
+  static const deplacementMin = 10.0;
 
   /// Un camarade silencieux depuis ce délai disparaît de la carte.
   static const oubli = Duration(minutes: 10);
@@ -39,6 +45,8 @@ class Partage extends ChangeNotifier {
   Timer? _minuterie;
   Reglages? _reglages;
   double? _lat, _lon, _precision;
+  double? _latEnvoyee, _lonEnvoyee;
+  DateTime _dernierEnvoi = DateTime(2000);
 
   Liaison? get liaison => _liaison;
 
@@ -73,7 +81,7 @@ class Partage extends ChangeNotifier {
     _liaison!.etat.addListener(notifyListeners);
     await _liaison!.demarrer();
     _minuterie = Timer.periodic(intervalle, (_) {
-      _envoyer();
+      if (_doitEnvoyer()) _envoyer();
       _nettoyer();
       if (DateTime.now().difference(_dernierRenvoi) >= renvoiDessins) {
         _envoyerMesDessins();
@@ -103,9 +111,32 @@ class Partage extends ChangeNotifier {
     if (premiere) _envoyer();
   }
 
+  bool _doitEnvoyer() => fautEnvoyer(
+      dernierEnvoi: _dernierEnvoi,
+      maintenant: DateTime.now(),
+      envoyee: _latEnvoyee == null ? null : LatLng(_latEnvoyee!, _lonEnvoyee!),
+      actuelle: _lat == null ? null : LatLng(_lat!, _lon!));
+
+  /// Faut-il renvoyer ma position ? Oui si j'ai bougé d'au moins
+  /// [deplacementMin] mètres, ou si le dernier envoi date de plus d'une minute.
+  static bool fautEnvoyer({
+    required DateTime dernierEnvoi,
+    required DateTime maintenant,
+    required LatLng? envoyee,
+    required LatLng? actuelle,
+  }) {
+    if (actuelle == null) return false;
+    if (envoyee == null) return true;
+    if (maintenant.difference(dernierEnvoi) >= intervalleImmobile) return true;
+    return const Distance()(envoyee, actuelle) >= deplacementMin;
+  }
+
   void _envoyer() {
     final r = _reglages;
     if (r == null || _lat == null || _liaison == null) return;
+    _dernierEnvoi = DateTime.now();
+    _latEnvoyee = _lat;
+    _lonEnvoyee = _lon;
     _liaison!.envoyer(CotEvenement.maPosition(
       uid: r.uid,
       indicatif: r.indicatif,

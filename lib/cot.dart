@@ -36,7 +36,7 @@ class CotEvenement {
     DateTime? perime,
   })  : heure = (heure ?? DateTime.now()).toUtc(),
         perime = (perime ??
-                (heure ?? DateTime.now()).add(const Duration(minutes: 2)))
+                (heure ?? DateTime.now()).add(const Duration(minutes: 3)))
             .toUtc();
 
   bool get estPerime => DateTime.now().toUtc().isAfter(perime);
