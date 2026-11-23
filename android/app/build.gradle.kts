@@ -31,11 +31,27 @@ android {
         versionName = flutter.versionName
     }
 
+    // Signature fixe de MUFASA : toujours la même clé, pour que chaque nouvelle
+    // version s'installe par-dessus l'ancienne. La clé vient des secrets GitHub
+    // (MUFASA_KEYSTORE, MUFASA_KEY_PASSWORD) ; sans elle, clé de débogage.
+    val cleMufasa = System.getenv("MUFASA_KEYSTORE_PATH")
+    val mdpMufasa = System.getenv("MUFASA_KEY_PASSWORD")
+    val signatureFixe = !cleMufasa.isNullOrEmpty() && !mdpMufasa.isNullOrEmpty()
+    signingConfigs {
+        if (signatureFixe) {
+            create("mufasa") {
+                storeFile = file(cleMufasa!!)
+                storePassword = mdpMufasa
+                keyAlias = "mufasa"
+                keyPassword = mdpMufasa
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (signatureFixe) signingConfigs.getByName("mufasa")
+                            else signingConfigs.getByName("debug")
         }
     }
 }

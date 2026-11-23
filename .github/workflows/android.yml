@@ -37,7 +37,20 @@ jobs:
       - name: Tests automatiques
         run: flutter test
 
+      - name: Préparer la signature
+        env:
+          MUFASA_KEYSTORE: ${{ secrets.MUFASA_KEYSTORE }}
+        run: |
+          if [ -z "$MUFASA_KEYSTORE" ]; then
+            echo "Secret MUFASA_KEYSTORE absent : la mise à jour par-dessus l'ancienne version ne marchera pas" >&2
+            exit 1
+          fi
+          echo "$MUFASA_KEYSTORE" | base64 -d > "$RUNNER_TEMP/mufasa.jks"
+          echo "MUFASA_KEYSTORE_PATH=$RUNNER_TEMP/mufasa.jks" >> "$GITHUB_ENV"
+
       - name: Fabriquer l'APK
+        env:
+          MUFASA_KEY_PASSWORD: ${{ secrets.MUFASA_KEY_PASSWORD }}
         run: flutter build apk --release --build-number=${{ github.run_number }}
 
       - name: Publier l'APK
