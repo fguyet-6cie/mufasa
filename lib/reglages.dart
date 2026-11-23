@@ -254,7 +254,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       hote: _relaisHote.text.trim(),
       port: int.tryParse(_relaisPort.text.trim()) ?? 8883,
       identifiant: _relaisId.text.trim(),
-      motDePasse: _relaisMdp.text,
+      motDePasse: _relaisMdp.text.trim(),
       codeGroupe: _code.text.trim(),
       admin: _pin,
     );
@@ -361,7 +361,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       ..relaisHote = _relaisHote.text.trim()
       ..relaisPort = int.tryParse(_relaisPort.text.trim()) ?? 8883
       ..relaisIdentifiant = _relaisId.text.trim()
-      ..relaisMotDePasse = _relaisMdp.text
+      ..relaisMotDePasse = _relaisMdp.text.trim()
       ..codeGroupe = _code.text.trim()
       ..pinAdmin = _pin
       ..fonction = _fonction
