@@ -30,8 +30,9 @@ télécharger `mufasa.apk`, puis l'ouvrir pour l'installer (autoriser
 
 ## Partage entre téléphones
 
-Uniquement en 4G/5G, via une « boîte aux lettres » en ligne (MQTT sur TLS, port 8883,
-par exemple HiveMQ Cloud gratuit). Les messages sont chiffrés dans le téléphone
+Uniquement en 4G/5G, via une « boîte aux lettres » en ligne (MQTT sur TLS, port 8883) :
+notre propre petit serveur Mosquitto, gratuit chez Oracle Cloud (Always Free, Marseille),
+installé par `serveur/installer-serveur.sh`. Les messages sont chiffrés dans le téléphone
 (AES-256-GCM) avec une clé tirée du code de groupe : l'hébergeur ne peut pas les lire.
 Les réglages se partagent en un seul texte « invitation » (MUFASA1:…).
 

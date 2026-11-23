@@ -474,7 +474,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
                   controller: _relaisHote,
                   decoration: const InputDecoration(
                       labelText: 'Adresse',
-                      hintText: 'xxxx.s1.eu.hivemq.cloud'),
+                      hintText: 'exemple : mufasa6.duckdns.org'),
                   keyboardType: TextInputType.url,
                   autocorrect: false,
                 ),
