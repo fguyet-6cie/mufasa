@@ -96,8 +96,12 @@ class Reglages {
   Fonction fonction;
   int section, groupe, numEquipe;
 
-  /// Niveau le plus détaillé que je veux voir (1 à 4), au choix du chef.
+  /// Ce que j'affiche : jusqu'à quel niveau (1, 2 ou 4) et quelle partie.
   int profondeur;
+  Perimetre perimetre;
+
+  /// Afficher les ennemis signalés il y a plus de 30 min.
+  bool ennemisAnciens;
 
   Place get place => Place(fonction,
       section: fonction.aSection ? section : 0,
@@ -110,6 +114,8 @@ class Reglages {
     this.groupe = 1,
     this.numEquipe = 1,
     this.profondeur = 4,
+    this.perimetre = Perimetre.compagnie,
+    this.ennemisAnciens = true,
     required this.uid,
     required this.indicatif,
     required this.equipe,
@@ -166,6 +172,11 @@ class Reglages {
       groupe: p.getInt('groupe') ?? 1,
       numEquipe: p.getInt('equipeNum') ?? 1,
       profondeur: p.getInt('profondeur') ?? 4,
+      perimetre: Perimetre.values
+              .where((v) => v.name == p.getString('perimetre'))
+              .firstOrNull ??
+          Perimetre.compagnie,
+      ennemisAnciens: p.getBool('ennemisAnciens') ?? true,
     );
   }
 
@@ -186,6 +197,8 @@ class Reglages {
     await p.setInt('groupe', groupe);
     await p.setInt('equipeNum', numEquipe);
     await p.setInt('profondeur', profondeur);
+    await p.setString('perimetre', perimetre.name);
+    await p.setBool('ennemisAnciens', ennemisAnciens);
   }
 }
 
@@ -332,15 +345,27 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
           Row(children: [
             if (_fonction.aSection)
               Expanded(
-                  child: _numero('Section', _section,
+                  child: _numero(
+                      'Section',
+                      _section.clamp(1, 4),
+                      {for (var i = 1; i <= 4; i++) i: 'CARMIN $i'},
                       (v) => setState(() => _section = v))),
             if (_fonction.aGroupe)
               Expanded(
                   child: _numero(
-                      'Groupe', _groupe, (v) => setState(() => _groupe = v))),
+                      'Groupe',
+                      _groupe.clamp(1, 3),
+                      {
+                        for (var i = 1; i <= 3; i++)
+                          i: 'GOLF ${_section.clamp(1, 4)}$i'
+                      },
+                      (v) => setState(() => _groupe = v))),
             if (_fonction.aEquipe)
               Expanded(
-                  child: _numero('Équipe', _equipeNum,
+                  child: _numero(
+                      'Trinôme',
+                      _equipeNum.clamp(1, 2),
+                      const {1: 'A', 2: 'B'},
                       (v) => setState(() => _equipeNum = v))),
           ]),
           const SizedBox(height: 24),
@@ -459,15 +484,18 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
     );
   }
 
-  Widget _numero(String titre, int valeur, ValueChanged<int> changer) =>
+  Widget _numero(String titre, int valeur, Map<int, String> choix,
+          ValueChanged<int> changer) =>
       Padding(
         padding: const EdgeInsets.only(right: 8),
         child: DropdownButtonFormField<int>(
+          key: ValueKey('$titre-${choix.values.join()}'),
           initialValue: valeur,
+          isExpanded: true,
           decoration: InputDecoration(labelText: titre),
           items: [
-            for (var i = 1; i <= 6; i++)
-              DropdownMenuItem(value: i, child: Text('$i')),
+            for (final e in choix.entries)
+              DropdownMenuItem(value: e.key, child: Text(e.value)),
           ],
           onChanged: (v) => changer(v!),
         ),

@@ -134,4 +134,49 @@ void main() {
     await q.chargerDessins();
     expect(q.dessins, isEmpty);
   });
+
+  test('ennemi : toujours là, il a bougé, plus là', () {
+    final e = Dessin(
+      uid: 'E9',
+      forme: FormeDessin.ennemi,
+      points: const [LatLng(48, 2)],
+      nom: '',
+      couleur: Colors.red,
+      auteur: 'A',
+      auteurIndicatif: 'GOLF 21B',
+      heure: DateTime.now().subtract(const Duration(minutes: 45)),
+      fiche: const {'volume': '1 groupe', 'heure': '13h10'},
+    );
+    expect(e.estAncien, isTrue);
+    final revu = e.toujoursLa(par: 'GOLF 32A', parUid: 'B');
+    expect(revu.estAncien, isFalse);
+    expect(revu.fiche['revuPar'], 'GOLF 32A');
+    expect(revu.fiche['volume'], '1 groupe');
+
+    final bouge = e.aBouge(const LatLng(48.01, 2.01), par: 'X', parUid: 'C');
+    final lu = Dessin.depuisXml(bouge.versXml())!;
+    expect(lu.points.first, const LatLng(48.01, 2.01));
+    expect(lu.anciennePosition, const LatLng(48, 2));
+    expect(lu.fiche['ancienHeure'], '13h10');
+
+    final parti = Dessin.depuisXml(e.plusLa(par: 'X', parUid: 'C').versXml())!;
+    expect(parti.disparu, isTrue);
+    expect(parti.toujoursLa(par: 'Y', parUid: 'D').disparu, isFalse);
+  });
+
+  test('un ennemi signalé tout près est peut-être le même', () {
+    final e = Dessin(
+      uid: 'E1',
+      forme: FormeDessin.ennemi,
+      points: const [LatLng(48, 2)],
+      nom: '',
+      couleur: Colors.red,
+      auteur: 'A',
+      auteurIndicatif: 'A',
+    );
+    expect(ennemiProche([e], const LatLng(48.001, 2.001))?.uid, 'E1'); // ~130 m
+    expect(ennemiProche([e], const LatLng(48.01, 2)), isNull); // ~1,1 km
+    final disparu = e.plusLa(par: 'X', parUid: 'C');
+    expect(ennemiProche([disparu], const LatLng(48.001, 2.001)), isNull);
+  });
 }

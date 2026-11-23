@@ -19,33 +19,43 @@ String heureCourte(DateTime d) {
 }
 
 /// Ouvre la fiche. Renvoie les informations remplies, ou null si abandon.
+/// [depart] : fiche d'un ennemi déjà connu, pour la mettre à jour.
 Future<Map<String, String>?> remplirFicheEnnemi(
-    BuildContext context, String observateur) {
+    BuildContext context, String observateur,
+    {Map<String, String> depart = const {}}) {
   return Navigator.push<Map<String, String>>(
     context,
     MaterialPageRoute(
       fullscreenDialog: true,
-      builder: (_) => _FicheEnnemi(observateur),
+      builder: (_) => _FicheEnnemi(observateur, depart),
     ),
   );
 }
 
 class _FicheEnnemi extends StatefulWidget {
   final String observateur;
-  const _FicheEnnemi(this.observateur);
+  final Map<String, String> depart;
+  const _FicheEnnemi(this.observateur, this.depart);
   @override
   State<_FicheEnnemi> createState() => _FicheEnnemiEtat();
 }
 
 class _FicheEnnemiEtat extends State<_FicheEnnemi> {
   final _vu = DateTime.now();
-  final _volume = TextEditingController();
-  final _direction = TextEditingController();
-  final _materiels = TextEditingController();
-  final _remarques = TextEditingController();
-  String _nature = 'Inconnu';
-  String _attitude = 'Statique';
-  String? _cap;
+  late final _volume = TextEditingController(text: widget.depart['volume']);
+  late final _direction =
+      TextEditingController(text: widget.depart['direction']);
+  late final _materiels =
+      TextEditingController(text: widget.depart['materiels']);
+  late final _remarques =
+      TextEditingController(text: widget.depart['remarques']);
+  late String _nature = naturesEnnemi.contains(widget.depart['nature'])
+      ? widget.depart['nature']!
+      : 'Inconnu';
+  late String _attitude = attitudesEnnemi.contains(widget.depart['attitude'])
+      ? widget.depart['attitude']!
+      : 'Statique';
+  late String? _cap = widget.depart['cap'];
 
   @override
   void dispose() {

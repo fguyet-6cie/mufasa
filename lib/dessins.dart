@@ -50,6 +50,23 @@ const nomsCaps = {
   'NO': 'le nord-ouest',
 };
 
+/// Ennemi déjà connu le plus proche de [ou], à moins de [metres] (sinon null).
+Dessin? ennemiProche(Iterable<Dessin> dessins, LatLng ou,
+    {double metres = 300}) {
+  const distance = Distance();
+  Dessin? meilleur;
+  var mieux = metres;
+  for (final d in dessins) {
+    if (d.forme != FormeDessin.ennemi || d.disparu) continue;
+    final m = distance(d.points.first, ou);
+    if (m <= mieux) {
+      mieux = m;
+      meilleur = d;
+    }
+  }
+  return meilleur;
+}
+
 /// Type CoT d'un ordre de suppression.
 const typeSuppression = 't-x-d-d';
 
@@ -68,6 +85,87 @@ class Dessin {
   final Map<String, String> fiche;
 
   String get observations => fiche['observations'] ?? '';
+
+  // ----- Ennemis : ancienneté et mises à jour -----
+
+  /// Au-delà de ce délai sans nouvelle, un ennemi pâlit sur la carte.
+  static const delaiAncien = Duration(minutes: 30);
+
+  bool get estAncien =>
+      forme == FormeDessin.ennemi &&
+      DateTime.now().toUtc().difference(heure) > delaiAncien;
+
+  /// « Plus là » : l'ennemi a disparu (il reste sur la carte, barré).
+  bool get disparu => fiche['etat'] == 'disparu';
+
+  /// Ancienne position, quand quelqu'un a indiqué « Il a bougé ».
+  LatLng? get anciennePosition {
+    final t = (fiche['ancien'] ?? '').split(',');
+    if (t.length != 2) return null;
+    final lat = double.tryParse(t[0]), lon = double.tryParse(t[1]);
+    return lat == null || lon == null ? null : LatLng(lat, lon);
+  }
+
+  /// Copie mise à jour maintenant par [par] (son indicatif) depuis [parUid].
+  Dessin _majPar(String par, String parUid,
+      {List<LatLng>? points, Map<String, String> fiche = const {}}) {
+    final maintenant = DateTime.now();
+    final h = maintenant.toLocal();
+    final hh =
+        '${h.hour.toString().padLeft(2, '0')}h${h.minute.toString().padLeft(2, '0')}';
+    return Dessin(
+      uid: uid,
+      forme: forme,
+      points: points ?? this.points,
+      nom: nom,
+      couleur: couleur,
+      auteur: parUid,
+      auteurIndicatif: par,
+      heure: maintenant,
+      fiche: {
+        ...this.fiche,
+        'heure': hh,
+        'revuPar': par,
+        ...fiche,
+      },
+    );
+  }
+
+  /// « Toujours là » : je le revois au même endroit.
+  Dessin toujoursLa({required String par, required String parUid}) {
+    final f = Map.of(fiche)..remove('etat');
+    return Dessin(
+      uid: uid,
+      forme: forme,
+      points: points,
+      nom: nom,
+      couleur: couleur,
+      auteur: auteur,
+      auteurIndicatif: auteurIndicatif,
+      heure: heure,
+      fiche: f,
+    )._majPar(par, parUid);
+  }
+
+  /// « Il a bougé » : il est maintenant en [vers] ; on garde l'ancienne place.
+  Dessin aBouge(LatLng vers,
+      {required String par,
+      required String parUid,
+      Map<String, String> fiche = const {}}) {
+    final p = points.first;
+    return _majPar(par, parUid, points: [
+      vers
+    ], fiche: {
+      'ancien': '${p.latitude},${p.longitude}',
+      'ancienHeure': this.fiche['heure'] ?? '',
+      'etat': '',
+      ...fiche,
+    });
+  }
+
+  /// « Plus là » : il a disparu (barré, pas effacé).
+  Dessin plusLa({required String par, required String parUid}) =>
+      _majPar(par, parUid, fiche: {'etat': 'disparu'});
 
   Dessin({
     this.fiche = const {},

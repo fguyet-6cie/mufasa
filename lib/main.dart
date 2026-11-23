@@ -16,6 +16,7 @@ import 'graphiques.dart';
 import 'hierarchie.dart';
 import 'outils_dessin.dart';
 import 'partage.dart';
+import 'pions.dart';
 import 'reglages.dart';
 
 void main() => runApp(const MufasaApp());
@@ -96,6 +97,15 @@ class _CarteScreenState extends State<CarteScreen> {
   // Tracé en cours
   FormeDessin? _outil;
   Dessin? _aDeplacer;
+
+  /// Ennemi dont on indique la nouvelle place (« Il a bougé »).
+  Dessin? _ennemiABouger;
+
+  /// Ami dont la bulle est ouverte.
+  String? _bulle;
+
+  /// Mon sens de marche (degrés), null si je ne bouge pas.
+  double? _monCap;
   bool _designation = false;
   StreamSubscription<Dessin>? _alertes;
   final _pointsTrace = <LatLng>[];
@@ -165,7 +175,14 @@ class _CarteScreenState extends State<CarteScreen> {
     ).listen((p) {
       final pos = LatLng(p.latitude, p.longitude);
       _partage.majPosition(p.latitude, p.longitude, p.accuracy);
-      setState(() => _maPosition = pos);
+      setState(() {
+        _maPosition = pos;
+        if (p.speed > 0.7 && p.heading >= 0) {
+          _monCap = p.heading;
+        } else if (p.speed >= 0 && p.speed < 0.3) {
+          _monCap = null;
+        }
+      });
       if (_premierePosition) {
         _premierePosition = false;
         _carte.move(pos, 15);
@@ -281,10 +298,50 @@ class _CarteScreenState extends State<CarteScreen> {
     ));
   }
 
+  String get _moi => _reglages?.indicatif ?? 'Inconnu';
+  String get _monUid => _reglages?.uid ?? '';
+
   Future<void> _signalerEnnemi(LatLng ou) async {
     setState(() => _designation = false);
-    final fiche =
-        await remplirFicheEnnemi(context, _reglages?.indicatif ?? 'Inconnu');
+    // Un ennemi est déjà connu tout près : est-ce le même ?
+    final proche = ennemiProche(_partage.dessins.values, ou);
+    if (proche != null) {
+      final m = const Distance()(proche.points.first, ou).round();
+      final f = proche.fiche;
+      final resume = [f['volume'], f['nature']]
+          .where((t) => t != null && t.isNotEmpty)
+          .join(' · ');
+      final meme = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Même ennemi ?'),
+          content: Text('Un ennemi a déjà été signalé à $m m d\'ici :\n'
+              '${resume.isEmpty ? 'sans détail' : resume}, par '
+              '${f['observateur'] ?? proche.auteurIndicatif} à ${f['heure'] ?? '?'}.'
+              '\n\nEst-ce le même ?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Non, un autre')),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Oui, le mettre à jour'),
+            ),
+          ],
+        ),
+      );
+      if (meme == null || !mounted) return;
+      if (meme) {
+        final fiche = await remplirFicheEnnemi(context, _moi, depart: f);
+        if (fiche == null || !mounted) return;
+        _partage.ajouterDessin(
+            proche.aBouge(ou, par: _moi, parUid: _monUid, fiche: fiche));
+        return;
+      }
+    }
+    final fiche = await remplirFicheEnnemi(context, _moi);
     if (fiche == null || !mounted) return;
     final r = Random.secure();
     _partage.ajouterDessin(Dessin(
@@ -301,6 +358,16 @@ class _CarteScreenState extends State<CarteScreen> {
   }
 
   void _toucherCarte(TapPosition tap, LatLng point) {
+    if (_bulle != null) {
+      setState(() => _bulle = null);
+      return;
+    }
+    final aBouger = _ennemiABouger;
+    if (aBouger != null) {
+      _partage.ajouterDessin(aBouger.aBouge(point, par: _moi, parUid: _monUid));
+      setState(() => _ennemiABouger = null);
+      return;
+    }
     if (_designation) {
       _signalerEnnemi(point);
       return;
@@ -318,7 +385,7 @@ class _CarteScreenState extends State<CarteScreen> {
       return;
     }
     final d = dessinTouche(
-        _carte.camera, _partage.dessins.values, tap.relative ?? Offset.zero);
+        _carte.camera, _dessinsAffiches, tap.relative ?? Offset.zero);
     if (d != null) _ouvrirFiche(d);
   }
 
@@ -329,6 +396,12 @@ class _CarteScreenState extends State<CarteScreen> {
         _partage.supprimerDessin(d.uid);
       case ActionDessin.deplacer:
         setState(() => _aDeplacer = d);
+      case ActionDessin.toujoursLa:
+        _partage.ajouterDessin(d.toujoursLa(par: _moi, parUid: _monUid));
+      case ActionDessin.aBouge:
+        setState(() => _ennemiABouger = d);
+      case ActionDessin.plusLa:
+        _partage.ajouterDessin(d.plusLa(par: _moi, parUid: _monUid));
       case null:
         break;
     }
@@ -349,8 +422,10 @@ class _CarteScreenState extends State<CarteScreen> {
         FormeDessin.ligne => 'Nouvelle ligne',
         _ => 'Nouvelle zone',
       },
-      couleurSuggeree: Colors.blue,
+      couleurSuggeree:
+          o == FormeDessin.point ? const Color(0xFFEF6C00) : Colors.blue,
       avecObservations: o == FormeDessin.point,
+      avecCouleur: o != FormeDessin.point,
     );
     if (!mounted) return;
     if (fin == null) {
@@ -378,52 +453,98 @@ class _CarteScreenState extends State<CarteScreen> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, maj) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_reglages != null &&
-                  _reglages!.fonction.niveau >= 0 &&
-                  _reglages!.fonction.niveau < 4) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Mes subordonnés : afficher jusqu\'aux…',
-                      style: Theme.of(ctx).textTheme.titleMedium),
-                ),
-                RadioGroup<int>(
-                  groupValue: _reglages!.profondeur
-                      .clamp(_reglages!.fonction.niveau + 1, 4),
-                  onChanged: (v) async {
-                    await _partage.choisirProfondeur(v!);
-                    maj(() {});
-                  },
-                  child: Column(children: [
-                    for (var n = _reglages!.fonction.niveau + 1; n <= 4; n++)
-                      RadioListTile<int>(
-                          value: n, title: Text(nomsNiveaux[n]!)),
-                  ]),
-                ),
-                const Divider(),
-              ],
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text('Fond de carte',
-                    style: Theme.of(ctx).textTheme.titleMedium),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_reglages != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('Ce que je vois',
+                          style: Theme.of(ctx).textTheme.titleMedium),
+                    ),
+                    RadioGroup<Perimetre>(
+                      groupValue: _reglages!.perimetre,
+                      onChanged: (v) async {
+                        await _partage.choisirAffichage(perimetre: v);
+                        maj(() {});
+                      },
+                      child: Column(children: [
+                        for (final e in nomsPerimetres.entries)
+                          RadioListTile<Perimetre>(
+                              dense: true, value: e.key, title: Text(e.value)),
+                      ]),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('Jusqu\'à',
+                          style: Theme.of(ctx).textTheme.titleMedium),
+                    ),
+                    RadioGroup<int>(
+                      groupValue: _reglages!.profondeur >= 3
+                          ? 4
+                          : _reglages!.profondeur.clamp(1, 2),
+                      onChanged: (v) async {
+                        await _partage.choisirAffichage(profondeur: v);
+                        maj(() {});
+                      },
+                      child: Column(children: [
+                        for (final e in nomsNiveaux.entries)
+                          RadioListTile<int>(
+                              dense: true, value: e.key, title: Text(e.value)),
+                      ]),
+                    ),
+                    SwitchListTile(
+                      dense: true,
+                      title: const Text(
+                          'Ennemis anciens (plus de 30 min) et disparus'),
+                      value: _reglages!.ennemisAnciens,
+                      onChanged: (v) async {
+                        await _partage.choisirAffichage(ennemisAnciens: v);
+                        maj(() {});
+                      },
+                    ),
+                    const Divider(),
+                  ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('Fond de carte',
+                        style: Theme.of(ctx).textTheme.titleMedium),
+                  ),
+                  RadioGroup<FondIgn>(
+                    groupValue: _fond,
+                    onChanged: (f) {
+                      setState(() => _fond = f!);
+                      maj(() {});
+                    },
+                    child: Column(children: [
+                      for (final f in fondsIgn)
+                        RadioListTile<FondIgn>(value: f, title: Text(f.nom)),
+                    ]),
+                  ),
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Qui est qui ?',
+                            style: Theme.of(ctx).textTheme.titleMedium),
+                        const SizedBox(height: 6),
+                        const Legende(),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              RadioGroup<FondIgn>(
-                groupValue: _fond,
-                onChanged: (f) {
-                  setState(() => _fond = f!);
-                  maj(() {});
-                },
-                child: Column(children: [
-                  for (final f in fondsIgn)
-                    RadioListTile<FondIgn>(value: f, title: Text(f.nom)),
-                ]),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -526,7 +647,7 @@ class _CarteScreenState extends State<CarteScreen> {
                 userAgentPackageName: 'fr.cie6.mufasa',
               ),
               CoucheDessins(
-                dessins: _partage.dessins.values.toList(),
+                dessins: _dessinsAffiches.toList(),
                 brouillon: _brouillon,
               ),
               MarkerLayer(markers: [
@@ -537,16 +658,26 @@ class _CarteScreenState extends State<CarteScreen> {
                 MarkerLayer(markers: [
                   Marker(
                     point: _maPosition!,
-                    width: 26,
-                    height: 26,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: const [
-                          BoxShadow(blurRadius: 4, color: Colors.black38)
-                        ],
+                    width: 40,
+                    height: 40,
+                    child: FlecheMoi(cap: _monCap),
+                  ),
+                ]),
+              if (_camaradeBulle case final c?)
+                MarkerLayer(markers: [
+                  Marker(
+                    point: LatLng(c.lat, c.lon),
+                    width: 260,
+                    height: 150,
+                    // La pointe de la bulle tombe juste au-dessus du pion.
+                    alignment: const Alignment(0, -1.05),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: BulleAmi(
+                            c: c,
+                            onFermer: () => setState(() => _bulle = null)),
                       ),
                     ),
                   ),
@@ -585,6 +716,24 @@ class _CarteScreenState extends State<CarteScreen> {
                         ),
                       ]),
                     ],
+                  ),
+                ),
+              ),
+            ),
+          if (_ennemiABouger != null)
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Material(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                elevation: 2,
+                child: ListTile(
+                  title: const Text('Touchez la nouvelle place de l\'ennemi.'),
+                  trailing: TextButton(
+                    onPressed: () => setState(() => _ennemiABouger = null),
+                    child: const Text('Annuler'),
                   ),
                 ),
               ),
@@ -671,60 +820,32 @@ class _CarteScreenState extends State<CarteScreen> {
     );
   }
 
+  /// Dessins affichés : on peut masquer les ennemis anciens ou disparus.
+  Iterable<Dessin> get _dessinsAffiches {
+    final anciens = _reglages?.ennemisAnciens ?? true;
+    return _partage.dessins.values
+        .where((d) => anciens || !(d.estAncien || d.disparu));
+  }
+
+  CotEvenement? get _camaradeBulle =>
+      _bulle == null ? null : _partage.camarades[_bulle];
+
   Marker _marqueurCamarade(CotEvenement c) {
-    final couleur = c.estPerime ? Colors.grey : couleurEquipe(c.equipe);
-    // Plus le chef est haut placé, plus son carré est grand.
-    final niveau = c.place.fonction.niveau;
-    final cote = niveau < 0 ? 22.0 : 30.0 - 3 * niveau;
-    final hauteur = cote + 22;
-    final abrev = c.place.fonction.abreviation;
-    // Les membres de mon trinôme sont entourés d'or.
-    final trinome = _partage.estDeMonTrinome(c);
+    final cdu = c.place.fonction == Fonction.cdu;
     return Marker(
       point: LatLng(c.lat, c.lon),
-      width: 130,
-      height: hauteur,
-      // Le centre du carré tombe sur la position.
-      alignment: Alignment(0, 1 - cote / hauteur),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: cote,
-            height: cote,
-            decoration: BoxDecoration(
-              color: couleur,
-              shape: BoxShape.rectangle,
-              borderRadius: BorderRadius.circular(4),
-              border: trinome
-                  ? Border.all(color: Colors.amber.shade600, width: 4)
-                  : Border.all(color: Colors.black87, width: 2),
-              boxShadow: trinome
-                  ? [BoxShadow(color: Colors.amber.shade300, blurRadius: 6)]
-                  : null,
-            ),
+      width: cdu ? 50 : 34,
+      height: cdu ? 58 : 34,
+      child: GestureDetector(
+        onTap: () => setState(() => _bulle = _bulle == c.uid ? null : c.uid),
+        child: Center(
+          child: PionAmi(
+            place: c.place,
+            monGroupe: _partage.estDeMonGroupe(c),
+            monTrinome: _partage.estDeMonTrinome(c),
+            perime: c.estPerime,
           ),
-          const SizedBox(height: 2),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            decoration: BoxDecoration(
-              color: trinome
-                  ? Colors.amber.shade200
-                  : Colors.white.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              abrev.isEmpty ? c.indicatif : '$abrev ${c.indicatif}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: c.estPerime ? Colors.grey : Colors.black,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

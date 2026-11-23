@@ -167,7 +167,7 @@ class Partage extends ChangeNotifier {
     final r = _reglages;
     if (r == null) return camarades.values;
     return camarades.values
-        .where((c) => estVisible(r.place, c.place, r.profondeur));
+        .where((c) => estVisible(r.place, c.place, r.profondeur, r.perimetre));
   }
 
   /// Ce camarade est-il dans mon trinôme ?
@@ -176,14 +176,25 @@ class Partage extends ChangeNotifier {
     return r != null && memeTrinome(r.place, c.place);
   }
 
-  /// Change le niveau de détail affiché (au choix du chef).
-  Future<void> choisirProfondeur(int niveau) async {
+  /// Change ce que j'affiche (chacun choisit).
+  Future<void> choisirAffichage(
+      {int? profondeur, Perimetre? perimetre, bool? ennemisAnciens}) async {
     final r = _reglages;
     if (r == null) return;
-    r.profondeur = niveau;
+    if (profondeur != null) r.profondeur = profondeur;
+    if (perimetre != null) r.perimetre = perimetre;
+    if (ennemisAnciens != null) r.ennemisAnciens = ennemisAnciens;
     await r.enregistrer();
     notifyListeners();
   }
+
+  /// Ce camarade est-il dans mon groupe (GOLF) ?
+  bool estDeMonGroupe(CotEvenement c) {
+    final r = _reglages;
+    return r != null && memeGroupe(r.place, c.place);
+  }
+
+  Reglages? get reglages => _reglages;
 
   // ----- Dessins -----
 

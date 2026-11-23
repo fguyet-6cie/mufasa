@@ -51,6 +51,7 @@ Future<FinDessin?> finaliserDessin(
   required String titre,
   required Color couleurSuggeree,
   bool avecObservations = false,
+  bool avecCouleur = true,
 }) {
   final nom = TextEditingController();
   final obs = TextEditingController();
@@ -88,25 +89,26 @@ Future<FinDessin?> finaliserDessin(
                   ),
                 ),
               ],
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final e in couleursDessin.entries)
-                    GestureDetector(
-                      onTap: () => setState(() => couleur = e.value),
-                      child: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: e.value,
-                        child: couleur.toARGB32() == e.value.toARGB32()
-                            ? const Icon(Icons.check,
-                                color: Colors.white, size: 18)
-                            : null,
+              if (avecCouleur) const SizedBox(height: 12),
+              if (avecCouleur)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final e in couleursDessin.entries)
+                      GestureDetector(
+                        onTap: () => setState(() => couleur = e.value),
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: e.value,
+                          child: couleur.toARGB32() == e.value.toARGB32()
+                              ? const Icon(Icons.check,
+                                  color: Colors.white, size: 18)
+                              : null,
+                        ),
                       ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -125,16 +127,20 @@ Future<FinDessin?> finaliserDessin(
   );
 }
 
-enum ActionDessin { supprimer, deplacer }
+enum ActionDessin { supprimer, deplacer, toujoursLa, aBouge, plusLa }
 
-/// Fiche d'un dessin touché sur la carte.
+/// Fiche d'un dessin touché sur la carte. Pour un ennemi, la fiche est
+/// rouge et propose « Toujours là », « Il a bougé » et « Plus là ».
 Future<ActionDessin?> ficheDessin(BuildContext context, Dessin d) {
-  final titre = d.forme == FormeDessin.ennemi
-      ? 'Ennemi signalé'
+  final eni = d.forme == FormeDessin.ennemi;
+  final titre = eni
+      ? (d.disparu ? 'Ennemi disparu' : 'Ennemi signalé')
       : (d.nom.isEmpty ? 'Sans nom' : d.nom);
   final heure = d.heure.toLocal();
   final hh =
       '${heure.hour.toString().padLeft(2, '0')}h${heure.minute.toString().padLeft(2, '0')}';
+  final texte = eni ? Colors.white : Colors.black87;
+  final mgrs = versMgrs(d.centre.latitude, d.centre.longitude);
   Widget rubrique(String nom, String valeur) => Padding(
         padding: const EdgeInsets.only(top: 2),
         child: Text.rich(TextSpan(children: [
@@ -144,59 +150,124 @@ Future<ActionDessin?> ficheDessin(BuildContext context, Dessin d) {
           TextSpan(text: valeur),
         ])),
       );
+  Widget bouton(String titre, String sous, Color fond, ActionDessin a,
+          BuildContext ctx) =>
+      Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: fond,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: Colors.white, width: 1.5)),
+            ),
+            onPressed: () => Navigator.pop(ctx, a),
+            child: Column(children: [
+              Text(titre,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(sous,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 11)),
+            ]),
+          ),
+        ),
+      );
   return showModalBottomSheet<ActionDessin>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
+    backgroundColor: eni ? Colors.red.shade700 : null,
     builder: (ctx) => SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(titre, style: Theme.of(ctx).textTheme.titleLarge),
-            if (d.forme == FormeDessin.ennemi)
-              for (final r in rubriquesEnnemi.entries)
-                if ((d.fiche[r.key] ?? '').isNotEmpty)
-                  rubrique(
-                      r.value,
-                      r.key == 'cap'
-                          ? nomsCaps[d.fiche['cap']] ?? d.fiche['cap']!
-                          : d.fiche[r.key]!),
-            if (d.observations.isNotEmpty)
-              rubrique('Observations', d.observations),
-            if (d.forme != FormeDessin.ligne &&
-                versMgrs(d.centre.latitude, d.centre.longitude).isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: SelectableText(
-                  'MGRS : ${versMgrs(d.centre.latitude, d.centre.longitude)}',
-                  style: const TextStyle(
-                      fontFamily: 'monospace', fontWeight: FontWeight.bold),
+        child: DefaultTextStyle.merge(
+          style: TextStyle(color: texte, fontSize: 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(titre,
+                  style: Theme.of(ctx)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(color: texte)),
+              if (eni)
+                for (final r in rubriquesEnnemi.entries)
+                  if ((d.fiche[r.key] ?? '').isNotEmpty)
+                    rubrique(
+                        r.value,
+                        r.key == 'cap'
+                            ? nomsCaps[d.fiche['cap']] ?? d.fiche['cap']!
+                            : d.fiche[r.key]!),
+              if (eni && (d.fiche['revuPar'] ?? '').isNotEmpty)
+                rubrique(d.disparu ? 'Vu disparu par' : 'Revu par',
+                    '${d.fiche['revuPar']} à ${d.fiche['heure'] ?? hh}'),
+              if (eni && d.anciennePosition != null)
+                rubrique('Avant',
+                    'ailleurs à ${d.fiche['ancienHeure'] ?? '?'} (pointillés)'),
+              if (d.observations.isNotEmpty)
+                rubrique('Observations', d.observations),
+              if (d.forme != FormeDessin.ligne && mgrs.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: SelectableText(
+                    'MGRS : $mgrs',
+                    style: TextStyle(
+                        color: texte,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
-            const SizedBox(height: 8),
-            Text(
-                'Par ${d.auteurIndicatif.isEmpty ? 'inconnu' : d.auteurIndicatif}, à $hh'),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: () => Navigator.pop(ctx, ActionDessin.deplacer),
-                  icon: const Icon(Icons.open_with),
-                  label: const Text('Déplacer'),
+              const SizedBox(height: 6),
+              Text(
+                  'Mis à jour par ${d.auteurIndicatif.isEmpty ? 'inconnu' : d.auteurIndicatif}, à $hh',
+                  style: TextStyle(color: texte.withValues(alpha: 0.8))),
+              const SizedBox(height: 14),
+              if (eni)
+                Row(children: [
+                  bouton('✓ Toujours là', 'je le revois ici',
+                      Colors.green.shade700, ActionDessin.toujoursLa, ctx),
+                  bouton('➜ Il a bougé', 'je touche sa nouvelle place',
+                      Colors.orange.shade800, ActionDessin.aBouge, ctx),
+                  if (!d.disparu)
+                    bouton('✕ Plus là', 'il a disparu', Colors.grey.shade800,
+                        ActionDessin.plusLa, ctx),
+                ]),
+              if (eni)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: Colors.white),
+                    onPressed: () => Navigator.pop(ctx, ActionDessin.supprimer),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Signalé par erreur : supprimer'),
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () =>
+                          Navigator.pop(ctx, ActionDessin.deplacer),
+                      icon: const Icon(Icons.open_with),
+                      label: const Text('Déplacer'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          Navigator.pop(ctx, ActionDessin.supprimer),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Supprimer pour tout le groupe'),
+                    ),
+                  ],
                 ),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(ctx, ActionDessin.supprimer),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Supprimer pour tout le groupe'),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),

@@ -25,36 +25,53 @@ const tous = [
   eq112
 ];
 
-List<Place> vus(Place moi, int profondeur) => [
+List<Place> vus(Place moi, int profondeur,
+        [Perimetre perimetre = Perimetre.compagnie]) =>
+    [
       for (final p in tous)
-        if (p != moi && estVisible(moi, p, profondeur)) p
+        if (p != moi && estVisible(moi, p, profondeur, perimetre)) p
     ];
 
 void main() {
-  test('le CDU choisit son niveau de détail', () {
-    expect(vus(cdu, 1), [cds1, cds2]);
+  test('par défaut, tout le monde voit tout le monde', () {
+    for (final moi in tous) {
+      expect(vus(moi, 4).length, tous.length - 1, reason: '$moi');
+    }
+  });
+
+  test('chacun choisit jusqu\'à quel niveau il affiche', () {
+    expect(vus(eq111, 1), [cdu, cds1, cds2]);
     expect(vus(cdu, 2), [cds1, cds2, cdg11, cdg12, cdg21]);
-    expect(vus(cdu, 4).length, tous.length - 1);
   });
 
-  test('le chef de section ne voit que sa section', () {
-    expect(vus(cds1, 4), [cdg11, cdg12, cde111, cde112, eq111, eq112]);
-    expect(vus(cds1, 2), [cdg11, cdg12]);
-    expect(vus(cds2, 4), [cdg21]);
+  test('ma section seulement, mon groupe seulement', () {
+    expect(vus(cds1, 4, Perimetre.section),
+        [cdu, cdg11, cdg12, cde111, cde112, eq111, eq112]);
+    expect(vus(cdg11, 4, Perimetre.groupe),
+        [cdu, cds1, cde111, cde112, eq111, eq112]);
+    expect(vus(eq111, 2, Perimetre.section), [cdu, cds1, cdg11, cdg12]);
+    // Le CDU n'a pas de section : il voit toute la compagnie.
+    expect(vus(cdu, 1, Perimetre.section), [cds1, cds2]);
   });
 
-  test('le chef de groupe voit ses équipes, le chef d\'équipe ses équipiers',
-      () {
-    expect(vus(cdg11, 3), [cde111, cde112]);
-    expect(vus(cdg11, 4), [cde111, cde112, eq111, eq112]);
-    expect(vus(cde111, 4), [eq111]);
-  });
-
-  test('l\'équipier voit tous les amis, et reconnaît son trinôme', () {
-    expect(vus(eq111, 4).length, tous.length - 1);
+  test('on reconnaît son trinôme et son groupe', () {
     expect(memeTrinome(eq111, cde111), isTrue);
     expect(memeTrinome(eq111, eq112), isFalse);
-    expect(memeTrinome(eq111, cdg11), isFalse);
+    expect(memeGroupe(eq111, eq112), isTrue);
+    expect(memeGroupe(eq111, cdg11), isTrue);
+    expect(memeGroupe(eq111, cdg12), isFalse);
+  });
+
+  test('noms : CARMIN, GOLF et trinômes A et B', () {
+    expect(cds2.numeroCarre, '2');
+    expect(cdg12.numeroCarre, '12');
+    expect(eq112.numeroCarre, '11');
+    expect(cdu.numeroCarre, '');
+    expect(cds2.description, 'CARMIN 2 · chef de section');
+    expect(cdg12.description, 'GOLF 12 · chef de groupe');
+    expect(cde112.description, "GOLF 11B · chef d'équipe");
+    expect(eq111.description, 'GOLF 11A');
+    expect(const Place(Fonction.sk).description, 'SK');
   });
 
   test('sans fonction renseignée, on voit tout et on est vu de tous', () {

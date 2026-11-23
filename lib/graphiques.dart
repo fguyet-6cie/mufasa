@@ -97,8 +97,8 @@ class _Peintre extends CustomPainter {
       final estBrouillon = identical(d, brouillon);
       switch (d.forme) {
         case FormeDessin.point:
-          _point(canvas, pts.first, d.couleur);
-          _etiquette(canvas, pts.first + const Offset(0, 16), d.nom, d.couleur);
+          // Point particulier : losange orange (nom visible en le touchant).
+          _losange(canvas, pts.first);
         case FormeDessin.ligne:
           if (pts.length > 1) canvas.drawPath(_chemin(pts), trait);
           _etiquette(canvas, _milieu(pts), d.nom, d.couleur);
@@ -118,16 +118,7 @@ class _Peintre extends CustomPainter {
           final haut = pts.reduce((a, b) => a.dy <= b.dy ? a : b);
           _etiquette(canvas, haut + const Offset(0, -14), d.nom, d.couleur);
         case FormeDessin.ennemi:
-          final p = pts.first;
-          final cap = capsEnnemi[d.fiche['cap']];
-          if (cap != null) _flecheEnnemi(canvas, p, cap);
-          canvas.drawCircle(p, 11, Paint()..color = Colors.white);
-          canvas.drawCircle(p, 8.5, Paint()..color = Colors.red.shade700);
-          final resume = [d.fiche['volume'], d.fiche['nature']]
-              .where((t) => t != null && t.isNotEmpty && t != 'Inconnu')
-              .join(' ');
-          _etiquette(canvas, p + const Offset(0, 20),
-              resume.isEmpty ? 'ENI' : 'ENI · $resume', d.couleur);
+          _ennemi(canvas, d, pts.first);
       }
       if (estBrouillon) {
         for (final p in pts) {
@@ -168,6 +159,102 @@ class _Peintre extends CustomPainter {
     return pts.last;
   }
 
+  void _losange(Canvas canvas, Offset p) {
+    final l = Path()
+      ..moveTo(p.dx, p.dy - 12)
+      ..lineTo(p.dx + 12, p.dy)
+      ..lineTo(p.dx, p.dy + 12)
+      ..lineTo(p.dx - 12, p.dy)
+      ..close();
+    canvas.drawPath(
+        l,
+        Paint()
+          ..color = Colors.black
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5.5
+          ..strokeJoin = StrokeJoin.miter);
+    canvas.drawPath(
+        l,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..strokeJoin = StrokeJoin.miter);
+    canvas.drawPath(l, Paint()..color = const Color(0xFFEF6C00));
+  }
+
+  /// Ennemi : rond rouge, flèche s'il bouge, heure en dessous. Il pâlit
+  /// après 30 min ; « plus là », il est grisé et barré ; s'il a bougé, son
+  /// ancienne place reste en pointillés.
+  void _ennemi(Canvas canvas, Dessin d, Offset p) {
+    final rouge = Colors.red.shade700;
+    final ancienne = d.anciennePosition;
+    if (ancienne != null) {
+      final a = camera.latLngToScreenOffset(ancienne);
+      final trait = Paint()
+        ..color = rouge.withValues(alpha: 0.8)
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke;
+      final chemin = Path()
+        ..moveTo(a.dx, a.dy)
+        ..lineTo(p.dx, p.dy);
+      canvas.drawPath(_pointilles(chemin, 6, 6), trait);
+      final cercle = Path()..addOval(Rect.fromCircle(center: a, radius: 8));
+      canvas.drawPath(_pointilles(cercle, 3, 3), trait);
+      _texteHeure(canvas, a + const Offset(0, 18), d.fiche['ancienHeure'] ?? '',
+          rouge.withValues(alpha: 0.8));
+    }
+    final pale = d.estAncien || d.disparu;
+    canvas.saveLayer(
+        null, Paint()..color = Colors.white.withValues(alpha: pale ? 0.4 : 1));
+    final cap = capsEnnemi[d.fiche['cap']];
+    if (cap != null && !d.disparu) _flecheEnnemi(canvas, p, cap);
+    canvas.drawCircle(p, 11, Paint()..color = Colors.white);
+    canvas.drawCircle(
+        p, 8.5, Paint()..color = d.disparu ? Colors.grey.shade700 : rouge);
+    canvas.restore();
+    if (d.disparu) {
+      final x = Paint()
+        ..color = Colors.black87
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(p + const Offset(-10, -10), p + const Offset(10, 10), x);
+      canvas.drawLine(p + const Offset(10, -10), p + const Offset(-10, 10), x);
+    }
+    final h = d.fiche['heure'] ?? '';
+    _texteHeure(canvas, p + const Offset(0, 20), d.disparu ? 'disparu $h' : h,
+        pale ? rouge.withValues(alpha: 0.6) : rouge);
+  }
+
+  void _texteHeure(Canvas canvas, Offset centre, String texte, Color couleur) {
+    if (texte.isEmpty) return;
+    final tp = TextPainter(
+      text: TextSpan(
+          text: texte,
+          style: TextStyle(
+              color: couleur, fontSize: 11, fontWeight: FontWeight.bold)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final rect = Rect.fromCenter(
+        center: centre, width: tp.width + 6, height: tp.height + 1);
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+        Paint()..color = Colors.white.withValues(alpha: 0.9));
+    tp.paint(canvas, centre - Offset(tp.width / 2, tp.height / 2));
+  }
+
+  Path _pointilles(Path source, double plein, double vide) {
+    final res = Path();
+    for (final m in source.computeMetrics()) {
+      var t = 0.0;
+      while (t < m.length) {
+        res.addPath(
+            m.extractPath(t, math.min(t + plein, m.length)), Offset.zero);
+        t += plein + vide;
+      }
+    }
+    return res;
+  }
+
   /// Flèche rouge partant du point ennemi, vers la direction où il va.
   void _flecheEnnemi(Canvas canvas, Offset p, int cap) {
     final a = cap * math.pi / 180;
@@ -194,11 +281,6 @@ class _Peintre extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(debut, base, rouge);
     canvas.drawPath(tete, Paint()..color = Colors.red.shade700);
-  }
-
-  void _point(Canvas canvas, Offset p, Color couleur) {
-    canvas.drawCircle(p, 9, Paint()..color = Colors.white);
-    canvas.drawCircle(p, 7, Paint()..color = couleur);
   }
 
   void _etiquette(Canvas canvas, Offset centre, String texte, Color couleur) {
