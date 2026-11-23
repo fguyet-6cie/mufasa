@@ -252,7 +252,7 @@ class Legende extends StatelessWidget {
         ]),
         const Text('Chiffre = n° de section (chef de section) ou de GOLF.'),
         const Text(
-            'Flèche bleue = moi · rond rouge = ennemi · losange orange = point particulier.'),
+            'Flèche bleue = moi · rond rouge = ennemi · épingle orange = point particulier.'),
       ],
     );
   }

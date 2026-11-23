@@ -8,10 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'hierarchie.dart';
 
-/// Attention : l'ordre compte (il est enregistré par numéro). Ajouter à la fin.
-/// « ancienServeur » (ancien mode serveur TAK) n'est plus proposé.
-enum ModePartage { aucun, wifi, ancienServeur, relais }
-
 /// Tout ce qu'il faut pour rejoindre un groupe en 4G/5G, en un seul texte à
 /// envoyer par messagerie : « MUFASA1:… ».
 class Invitation {
@@ -67,7 +63,6 @@ class Invitation {
 class Reglages {
   String uid;
   String indicatif;
-  ModePartage mode;
   // Boîte aux lettres 4G/5G
   String relaisHote;
   int relaisPort;
@@ -100,7 +95,6 @@ class Reglages {
     this.ennemisAnciens = true,
     required this.uid,
     required this.indicatif,
-    required this.mode,
     required this.relaisHote,
     required this.relaisPort,
     required this.relaisIdentifiant,
@@ -134,11 +128,6 @@ class Reglages {
     return Reglages(
       uid: uid,
       indicatif: p.getString('indicatif') ?? 'Sans nom',
-      mode: switch (
-          ModePartage.values[p.getInt('mode') ?? ModePartage.relais.index]) {
-        ModePartage.ancienServeur => ModePartage.relais,
-        final m => m,
-      },
       relaisHote: p.getString('relaisHote') ?? '',
       relaisPort: p.getInt('relaisPort') ?? 8883,
       relaisIdentifiant: p.getString('relaisIdentifiant') ?? '',
@@ -163,7 +152,6 @@ class Reglages {
   Future<void> enregistrer() async {
     final p = await SharedPreferences.getInstance();
     await p.setString('indicatif', indicatif);
-    await p.setInt('mode', mode.index);
     await p.setString('relaisHote', relaisHote);
     await p.setInt('relaisPort', relaisPort);
     await p.setString('relaisIdentifiant', relaisIdentifiant);
@@ -196,7 +184,6 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
   late final _relaisId = TextEditingController(text: r.relaisIdentifiant);
   late final _relaisMdp = TextEditingController(text: r.relaisMotDePasse);
   late final _code = TextEditingController(text: r.codeGroupe);
-  late ModePartage _mode = r.mode;
   late Fonction _fonction = r.fonction;
   late int _section = r.section, _groupe = r.groupe, _equipeNum = r.numEquipe;
   bool _voirAcces = false;
@@ -223,18 +210,17 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
     final presse = await Clipboard.getData(Clipboard.kTextPlain);
     final inv = Invitation.decoder(presse?.text ?? '');
     if (inv == null) {
-      _info('Pas d\'invitation Mufasa dans le presse-papiers.');
+      _info('Pas d\'invitation MUFASA dans le presse-papiers.');
       return;
     }
     setState(() {
-      _mode = ModePartage.relais;
       _relaisHote.text = inv.hote;
       _relaisPort.text = '${inv.port}';
       _relaisId.text = inv.identifiant;
       _relaisMdp.text = inv.motDePasse;
       _code.text = inv.codeGroupe;
     });
-    _info('Invitation reçue. Appuyez sur Enregistrer.');
+    _info('Invitation reçue. Appuie sur Enregistrer.');
   }
 
   Future<void> _copierInvitation() async {
@@ -246,16 +232,15 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       codeGroupe: _code.text.trim(),
     );
     await Clipboard.setData(ClipboardData(
-        text: 'Rejoins le groupe Mufasa : ouvre Mufasa > Réglages > '
+        text: 'Rejoins MUFASA : ouvre MUFASA > Réglages > '
             '« Coller une invitation ».\n${inv.encoder()}'));
-    _info('Invitation copiée. Envoyez-la par messagerie à votre groupe.');
+    _info('Invitation copiée. Envoie-la par messagerie à ta compagnie.');
   }
 
   Future<void> _valider() async {
     r
       ..indicatif =
           _indicatif.text.trim().isEmpty ? 'Sans nom' : _indicatif.text.trim()
-      ..mode = _mode
       ..relaisHote = _relaisHote.text.trim()
       ..relaisPort = int.tryParse(_relaisPort.text.trim()) ?? 8883
       ..relaisIdentifiant = _relaisId.text.trim()
@@ -321,30 +306,8 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
                       (v) => setState(() => _equipeNum = v))),
           ]),
           const SizedBox(height: 24),
-          Text('Partage des positions', style: titre),
-          RadioGroup<ModePartage>(
-            groupValue: _mode,
-            onChanged: (v) => setState(() => _mode = v!),
-            child: const Column(children: [
-              RadioListTile(
-                value: ModePartage.relais,
-                title: Text('4G/5G'),
-                subtitle: Text('Partout où il y a du réseau mobile. '
-                    'Positions chiffrées avec le code de groupe.'),
-              ),
-              RadioListTile(
-                value: ModePartage.wifi,
-                title: Text('Sans réseau mobile (même Wi-Fi)'),
-                subtitle: Text('Secours : tous les téléphones sur le même '
-                    'Wi-Fi ou le même partage de connexion.'),
-              ),
-              RadioListTile(
-                value: ModePartage.aucun,
-                title: Text('Désactivé'),
-              ),
-            ]),
-          ),
-          if (_mode == ModePartage.relais) ...[
+          Text('Accès au partage', style: titre),
+          ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _collerInvitation,
@@ -354,10 +317,10 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
             TextField(
               controller: _code,
               decoration: const InputDecoration(
-                labelText: 'Code de groupe',
+                labelText: 'Code de la compagnie',
                 helperMaxLines: 3,
-                helperText: 'Le même sur tous les téléphones du groupe. '
-                    'Il sert de clé de chiffrement : choisissez-le long.',
+                helperText: 'Le même sur tous les téléphones de la compagnie. '
+                    'Il sert de clé de chiffrement : choisis-le long.',
               ),
             ),
             const SizedBox(height: 8),
@@ -404,7 +367,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
             TextButton.icon(
               onPressed: _copierInvitation,
               icon: const Icon(Icons.share),
-              label: const Text('Copier une invitation pour mon groupe'),
+              label: const Text('Copier une invitation pour la compagnie'),
             ),
           ],
           const SizedBox(height: 24),

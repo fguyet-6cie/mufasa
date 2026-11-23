@@ -15,9 +15,9 @@ Future<FormeDessin?> choisirOutil(BuildContext context) {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: const Icon(Icons.place),
+            leading: const Icon(Icons.place, color: Color(0xFFEF6C00)),
             title: const Text('Point particulier'),
-            subtitle: const Text('Un repère avec vos observations'),
+            subtitle: const Text('Un repère avec tes observations'),
             onTap: () => Navigator.pop(ctx, FormeDessin.point),
           ),
           ListTile(
@@ -84,7 +84,7 @@ Future<FinDessin?> finaliserDessin(
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
                     labelText: 'Observations',
-                    hintText: 'Ce que vous avez vu, l\'état des lieux…',
+                    hintText: 'Ce que tu as vu, l\'état des lieux…',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -262,7 +262,7 @@ Future<ActionDessin?> ficheDessin(BuildContext context, Dessin d) {
                       onPressed: () =>
                           Navigator.pop(ctx, ActionDessin.supprimer),
                       icon: const Icon(Icons.delete_outline),
-                      label: const Text('Supprimer pour tout le groupe'),
+                      label: const Text('Supprimer pour tout le monde'),
                     ),
                   ],
                 ),
@@ -272,4 +272,34 @@ Future<ActionDessin?> ficheDessin(BuildContext context, Dessin d) {
       ),
     ),
   );
+}
+
+/// Demande confirmation avant d'effacer un dessin chez tout le monde.
+Future<bool> confirmerSuppression(BuildContext context, Dessin d) async {
+  final quoi = switch (d.forme) {
+    FormeDessin.ennemi => 'cet ennemi',
+    FormeDessin.point => d.nom.isEmpty ? 'ce point' : '« ${d.nom} »',
+    FormeDessin.ligne => d.nom.isEmpty ? 'cette ligne' : '« ${d.nom} »',
+    FormeDessin.zone => d.nom.isEmpty ? 'cette zone' : '« ${d.nom} »',
+  };
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.delete_outline, size: 36),
+      title: const Text('Supprimer pour tout le monde ?'),
+      content: Text('Tu vas effacer $quoi de la carte de tous les membres '
+          'de la compagnie. Ce n\'est pas réversible.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Supprimer'),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
 }

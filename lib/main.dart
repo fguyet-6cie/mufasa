@@ -202,7 +202,7 @@ class _CarteScreenState extends State<CarteScreen> {
 
   /// Réglages du GPS : économes, et actifs même écran éteint (notification
   /// permanente sur Android, pastille bleue sur iPhone).
-  static LocationSettings reglagesGps({bool wifi = false}) {
+  static LocationSettings reglagesGps() {
     const metres = 10; // nouvelle position seulement après 10 m
     if (kIsWeb) {
       return const LocationSettings(
@@ -221,7 +221,6 @@ class _CarteScreenState extends State<CarteScreen> {
             // Garde le téléphone éveillé juste assez pour envoyer la position
             // et recevoir les alertes écran éteint.
             enableWakeLock: true,
-            enableWifiLock: wifi,
           ),
         ),
       TargetPlatform.iOS => AppleSettings(
@@ -239,7 +238,7 @@ class _CarteScreenState extends State<CarteScreen> {
 
   Future<void> _demarrerGeoloc() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      setState(() => _message = 'Activez la localisation (GPS) du téléphone.');
+      setState(() => _message = 'Active la localisation (GPS) du téléphone.');
       return;
     }
     var droit = await Geolocator.checkPermission();
@@ -248,12 +247,12 @@ class _CarteScreenState extends State<CarteScreen> {
     }
     if (droit == LocationPermission.denied ||
         droit == LocationPermission.deniedForever) {
-      setState(() => _message = 'Mufasa a besoin de votre position.');
+      setState(() => _message = 'MUFASA a besoin de ta position.');
       return;
     }
     setState(() => _message = null);
     _suivi = Geolocator.getPositionStream(
-      locationSettings: reglagesGps(wifi: _reglages?.mode == ModePartage.wifi),
+      locationSettings: reglagesGps(),
     ).listen((p) {
       final pos = LatLng(p.latitude, p.longitude);
       _partage.majPosition(p.latitude, p.longitude, p.accuracy);
@@ -290,7 +289,7 @@ class _CarteScreenState extends State<CarteScreen> {
         title: const Text('Effacement d\'urgence'),
         content: const Text('Tout effacer de ce téléphone ?\n\n'
             '• positions, ennemis, points et dessins reçus ;\n'
-            '• réglages, code de groupe et accès au réseau.\n\n'
+            '• réglages, code de la compagnie et accès au réseau.\n\n'
             'Le partage s\'arrête aussitôt. Les autres téléphones ne sont '
             'pas touchés. Impossible d\'annuler.'),
         actions: [
@@ -312,7 +311,7 @@ class _CarteScreenState extends State<CarteScreen> {
     await _partage.toutEffacer();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Toutes les données de Mufasa ont été effacées.')));
+        content: Text('Toutes les données de MUFASA ont été effacées.')));
     widget.onEfface?.call();
   }
 
@@ -339,10 +338,10 @@ class _CarteScreenState extends State<CarteScreen> {
 
   String get _consigne => switch (_outil) {
         FormeDessin.point =>
-          'Touchez la carte pour placer le point particulier.',
+          'Touche la carte pour placer le point particulier.',
         FormeDessin.ligne =>
-          'Touchez la carte pour poser les points de la ligne.',
-        _ => 'Touchez la carte pour poser les coins de la zone.',
+          'Touche la carte pour poser les points de la ligne.',
+        _ => 'Touche la carte pour poser les coins de la zone.',
       };
 
   Dessin? get _brouillon {
@@ -486,7 +485,10 @@ class _CarteScreenState extends State<CarteScreen> {
     final action = await ficheDessin(context, d);
     switch (action) {
       case ActionDessin.supprimer:
-        _partage.supprimerDessin(d.uid);
+        if (!mounted) return;
+        if (await confirmerSuppression(context, d) && mounted) {
+          _partage.supprimerDessin(d.uid);
+        }
       case ActionDessin.deplacer:
         setState(() => _aDeplacer = d);
       case ActionDessin.toujoursLa:
@@ -796,7 +798,7 @@ class _CarteScreenState extends State<CarteScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Touchez la carte là où se trouve l\'ennemi.'),
+                      const Text('Touche la carte là où se trouve l\'ennemi.'),
                       Wrap(spacing: 8, children: [
                         if (_maPosition != null)
                           TextButton(
@@ -823,7 +825,7 @@ class _CarteScreenState extends State<CarteScreen> {
                 borderRadius: BorderRadius.circular(8),
                 elevation: 2,
                 child: ListTile(
-                  title: const Text('Touchez la nouvelle place de l\'ennemi.'),
+                  title: const Text('Touche la nouvelle place de l\'ennemi.'),
                   trailing: TextButton(
                     onPressed: () => setState(() => _ennemiABouger = null),
                     child: const Text('Annuler'),
@@ -841,7 +843,7 @@ class _CarteScreenState extends State<CarteScreen> {
                 borderRadius: BorderRadius.circular(8),
                 elevation: 2,
                 child: ListTile(
-                  title: const Text('Touchez le nouvel emplacement.'),
+                  title: const Text('Touche le nouvel emplacement.'),
                   trailing: TextButton(
                     onPressed: () => setState(() => _aDeplacer = null),
                     child: const Text('Annuler'),

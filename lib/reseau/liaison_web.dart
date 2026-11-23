@@ -18,7 +18,6 @@ class _LiaisonInactive extends Liaison {
   Future<void> arreter() async => etat.value = 'arrêtée';
 }
 
-Liaison liaisonWifi() => _LiaisonInactive('Wi-Fi local');
 Liaison liaisonRelais({
   required String hote,
   required int port,

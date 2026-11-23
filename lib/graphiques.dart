@@ -29,6 +29,9 @@ class CoucheDessins extends StatelessWidget {
   }
 }
 
+/// Hauteur de la tête de l'épingle au-dessus du point, en pixels.
+const hauteurEpingle = 22.0;
+
 /// Cherche le dessin le plus proche d'un toucher (à 24 pixels près).
 Dessin? dessinTouche(
     MapCamera camera, Iterable<Dessin> dessins, Offset toucher) {
@@ -38,7 +41,11 @@ Dessin? dessinTouche(
     final pts = d.points.map(camera.latLngToScreenOffset).toList();
     double dist;
     if (pts.length == 1) {
-      dist = (pts.first - toucher).distance;
+      // Pour une épingle, on vise la tête, au-dessus du point.
+      final cible = d.forme == FormeDessin.point
+          ? pts.first + const Offset(0, -hauteurEpingle)
+          : pts.first;
+      dist = (cible - toucher).distance;
     } else {
       dist = double.infinity;
       final segs = [
@@ -97,8 +104,8 @@ class _Peintre extends CustomPainter {
       final estBrouillon = identical(d, brouillon);
       switch (d.forme) {
         case FormeDessin.point:
-          // Point particulier : losange orange (nom visible en le touchant).
-          _losange(canvas, pts.first);
+          // Point particulier : épingle orange (nom visible en la touchant).
+          _epingle(canvas, pts.first);
         case FormeDessin.ligne:
           if (pts.length > 1) canvas.drawPath(_chemin(pts), trait);
           _etiquette(canvas, _milieu(pts), d.nom, d.couleur);
@@ -159,28 +166,26 @@ class _Peintre extends CustomPainter {
     return pts.last;
   }
 
-  void _losange(Canvas canvas, Offset p) {
-    final l = Path()
-      ..moveTo(p.dx, p.dy - 12)
-      ..lineTo(p.dx + 12, p.dy)
-      ..lineTo(p.dx, p.dy + 12)
-      ..lineTo(p.dx - 12, p.dy)
+  /// Épingle orange : la pointe est sur le point, la tête au-dessus.
+  void _epingle(Canvas canvas, Offset p) {
+    final tete = p + const Offset(0, -hauteurEpingle);
+    const r = 10.0;
+    final e = Path()
+      ..moveTo(p.dx, p.dy)
+      ..lineTo(tete.dx - r * 0.82, tete.dy + r * 0.57)
+      ..arcToPoint(Offset(tete.dx + r * 0.82, tete.dy + r * 0.57),
+          radius: const Radius.circular(r), largeArc: true)
       ..close();
+    canvas.drawShadow(e, Colors.black, 3, false);
     canvas.drawPath(
-        l,
-        Paint()
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5.5
-          ..strokeJoin = StrokeJoin.miter);
-    canvas.drawPath(
-        l,
+        e,
         Paint()
           ..color = Colors.white
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 4
-          ..strokeJoin = StrokeJoin.miter);
-    canvas.drawPath(l, Paint()..color = const Color(0xFFEF6C00));
+          ..strokeWidth = 3
+          ..strokeJoin = StrokeJoin.round);
+    canvas.drawPath(e, Paint()..color = const Color(0xFFEF6C00));
+    canvas.drawCircle(tete, 3.8, Paint()..color = Colors.white);
   }
 
   /// Ennemi : rond rouge, flèche s'il bouge, heure en dessous. Il pâlit

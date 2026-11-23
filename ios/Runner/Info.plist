@@ -3,15 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>MUFASA partage votre position avec votre compagnie, y compris écran éteint.</string>
+	<string>MUFASA partage ta position avec ta compagnie, y compris écran éteint.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>MUFASA affiche votre position sur la carte et la partage avec votre groupe.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Mufasa échange les positions avec les autres téléphones du même réseau Wi-Fi.</string>
+	<string>MUFASA affiche ta position sur la carte et la partage avec ta compagnie.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

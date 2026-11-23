@@ -24,27 +24,25 @@ télécharger `mufasa.apk`, puis l'ouvrir pour l'installer (autoriser
 2. **Ennemis** : bouton Ennemi, fiche (volume, nature, attitude, direction…),
    rond rouge chez tous. Les ennemis pâlissent après 30 min ; boutons
    « Toujours là », « Il a bougé », « Plus là » ; détection « même ennemi ? ».
-3. **Points particuliers** (losange orange) avec observations.
+3. **Points particuliers** (épingle orange) avec observations.
 4. **Dessin libre** (lignes et zones) partagé avec tout le monde.
 5. **Effacement d'urgence** de toutes les données du téléphone.
 
 ## Partage entre téléphones
 
-- 4G/5G : via une « boîte aux lettres » en ligne (MQTT sur TLS, port 8883,
-  par exemple HiveMQ Cloud gratuit). Les messages sont chiffrés dans le téléphone
-  (AES-256-GCM) avec une clé tirée du code de groupe : l'hébergeur ne peut pas les lire.
-  Les réglages se partagent en un seul texte « invitation » (MUFASA1:…).
-- Sans réseau mobile : téléphones sur le même Wi-Fi ou partage de connexion
-  (multidiffusion 239.21.6.6:21606).
+Uniquement en 4G/5G, via une « boîte aux lettres » en ligne (MQTT sur TLS, port 8883,
+par exemple HiveMQ Cloud gratuit). Les messages sont chiffrés dans le téléphone
+(AES-256-GCM) avec une clé tirée du code de groupe : l'hébergeur ne peut pas les lire.
+Les réglages se partagent en un seul texte « invitation » (MUFASA1:…).
 
-Limite connue : sur iPhone, le mode Wi-Fi demande une autorisation spéciale d'Apple
-(« multicast entitlement ») ; le mode 4G/5G marche sans.
+L'appli reste active écran éteint (service de position au premier plan sur Android,
+localisation en arrière-plan sur iPhone). Alertes ennemi : vibration seulement.
 
 ## Fichiers importants
 
 - `lib/main.dart` : l'écran carte.
 - `lib/accueil.dart` : l'écran d'accueil.
-- `lib/reglages.dart` : l'écran réglages (indicatif, place dans la compagnie, mode de partage).
+- `lib/reglages.dart` : l'écran réglages (indicatif, place dans la compagnie, accès 4G/5G).
 - `lib/hierarchie.dart` : sections, groupes, trinômes et filtre « Ce que je vois ».
 - `lib/pions.dart` : dessin des pions amis, bulle, légende.
 - `lib/partage.dart` : envoi de ma position toutes les 10 s, liste des camarades.
@@ -55,7 +53,8 @@ Limite connue : sur iPhone, le mode Wi-Fi demande une autorisation spéciale d'A
 - `lib/outils_dessin.dart` : fenêtres pour dessiner et fiche d'un dessin.
 - `lib/mgrs.dart` : coordonnées MGRS.
 - `lib/chiffrement.dart` : chiffrement des messages avec le code de groupe.
-- `lib/reseau/` : les modes de liaison (4G/5G, Wi-Fi local).
+- `lib/reseau/` : la liaison 4G/5G.
+- `lib/notifications.dart` : alertes ennemi et autorisations.
 - `test/` : les tests automatiques (`flutter test`).
 
 ## Lancer l'appli (pour un développeur)

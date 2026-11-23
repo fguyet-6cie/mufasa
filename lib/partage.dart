@@ -57,26 +57,19 @@ class Partage extends ChangeNotifier {
     await arreter();
     avertissement = null;
     _reglages = r;
-    switch (r.mode) {
-      case ModePartage.aucun:
-        return;
-      case ModePartage.wifi:
-        _liaison = liaisonWifi();
-      case ModePartage.relais || ModePartage.ancienServeur:
-        if (!r.relaisComplet) {
-          avertissement = '4G/5G : réglages à compléter';
-          notifyListeners();
-          return;
-        }
-        _liaison = liaisonRelais(
-          hote: r.relaisHote,
-          port: r.relaisPort,
-          identifiant: r.relaisIdentifiant,
-          motDePasse: r.relaisMotDePasse,
-          codeGroupe: r.codeGroupe,
-          uid: r.uid,
-        );
+    if (!r.relaisComplet) {
+      avertissement = 'Partage : réglages 4G/5G à compléter';
+      notifyListeners();
+      return;
     }
+    _liaison = liaisonRelais(
+      hote: r.relaisHote,
+      port: r.relaisPort,
+      identifiant: r.relaisIdentifiant,
+      motDePasse: r.relaisMotDePasse,
+      codeGroupe: r.codeGroupe,
+      uid: r.uid,
+    );
     _ecoute = _liaison!.messages.listen(recevoir);
     _liaison!.etat.addListener(notifyListeners);
     await _liaison!.demarrer();
