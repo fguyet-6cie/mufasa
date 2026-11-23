@@ -14,7 +14,12 @@ class CoucheDessins extends StatelessWidget {
   /// Tracé en cours (aperçu pendant que l'utilisateur pose les points).
   final Dessin? brouillon;
 
-  const CoucheDessins({super.key, required this.dessins, this.brouillon});
+  /// Heure de référence pour l'ancienneté des ennemis (rejeu) ; maintenant
+  /// si null.
+  final DateTime? maintenant;
+
+  const CoucheDessins(
+      {super.key, required this.dessins, this.brouillon, this.maintenant});
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +28,10 @@ class CoucheDessins extends StatelessWidget {
       child: CustomPaint(
         size: Size.infinite,
         painter: _Peintre(
-            camera, [...dessins, if (brouillon != null) brouillon!], brouillon),
+            camera,
+            [...dessins, if (brouillon != null) brouillon!],
+            brouillon,
+            maintenant),
       ),
     );
   }
@@ -89,7 +97,8 @@ class _Peintre extends CustomPainter {
   final MapCamera camera;
   final List<Dessin> dessins;
   final Dessin? brouillon;
-  _Peintre(this.camera, this.dessins, this.brouillon);
+  final DateTime? maintenant;
+  _Peintre(this.camera, this.dessins, this.brouillon, this.maintenant);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -209,7 +218,7 @@ class _Peintre extends CustomPainter {
       _texteHeure(canvas, a + const Offset(0, 18), d.fiche['ancienHeure'] ?? '',
           rouge.withValues(alpha: 0.8));
     }
-    final pale = d.estAncien || d.disparu;
+    final pale = d.ancienA(maintenant ?? DateTime.now()) || d.disparu;
     canvas.saveLayer(
         null, Paint()..color = Colors.white.withValues(alpha: pale ? 0.4 : 1));
     final cap = capsEnnemi[d.fiche['cap']];

@@ -91,9 +91,11 @@ class Dessin {
   /// Au-delà de ce délai sans nouvelle, un ennemi pâlit sur la carte.
   static const delaiAncien = Duration(minutes: 30);
 
-  bool get estAncien =>
-      forme == FormeDessin.ennemi &&
-      DateTime.now().toUtc().difference(heure) > delaiAncien;
+  bool get estAncien => ancienA(DateTime.now());
+
+  /// Ancien à l'heure [t] (utile pour le rejeu d'un exercice).
+  bool ancienA(DateTime t) =>
+      forme == FormeDessin.ennemi && t.toUtc().difference(heure) > delaiAncien;
 
   /// « Plus là » : l'ennemi a disparu (il reste sur la carte, barré).
   bool get disparu => fiche['etat'] == 'disparu';

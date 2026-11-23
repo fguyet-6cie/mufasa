@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'hierarchie.dart';
+import 'rejeu/rejeu_screen.dart';
 
 /// Empreinte du code PIN administrateur (on ne garde jamais le code lui-même).
 Future<String> empreintePin(String pin) async {
@@ -506,6 +507,17 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
               onPressed: _copierInvitation,
               icon: const Icon(Icons.share),
               label: const Text('Copier une invitation pour la compagnie'),
+            ),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.history),
+              title: const Text('Rejeu des exercices'),
+              subtitle: const Text('Enregistrer un exercice et le rejouer '
+                  'pour le RETEX'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ExercicesScreen())),
             ),
           ],
           const SizedBox(height: 24),

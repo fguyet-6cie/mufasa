@@ -19,6 +19,7 @@ import 'ennemi.dart';
 import 'graphiques.dart';
 import 'hierarchie.dart';
 import 'cartes/cartes_hors_ligne.dart';
+import 'cartes/fonds.dart';
 import 'mgrs.dart';
 import 'mode_nuit.dart';
 import 'notifications.dart';
@@ -26,11 +27,14 @@ import 'outils_dessin.dart';
 import 'partage.dart';
 import 'pions.dart';
 import 'reglages.dart';
+import 'rejeu/enregistrement.dart';
+import 'rejeu/stockage.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await preparerCartes();
   await chargerModeNuit();
+  await enregistrement.reprendre();
   runApp(const MufasaApp());
 }
 
@@ -79,31 +83,6 @@ class _MufasaAppState extends State<MufasaApp> {
     );
   }
 }
-
-/// Un fond de carte IGN (Géoplateforme, service WMTS gratuit sans clé).
-class FondIgn {
-  final String nom;
-  final String couche;
-  final String format;
-  final int zoomMax;
-  const FondIgn(this.nom, this.couche, this.format, this.zoomMax);
-
-  String get extension => format == 'image/png' ? 'png' : 'jpg';
-
-  String urlTuile(int z, int x, int y) => url
-      .replaceAll('{z}', '$z')
-      .replaceAll('{x}', '$x')
-      .replaceAll('{y}', '$y');
-
-  String get url => 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile'
-      '&VERSION=1.0.0&LAYER=$couche&STYLE=normal&TILEMATRIXSET=PM'
-      '&FORMAT=$format&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
-}
-
-const fondsIgn = [
-  FondIgn('Plan IGN', 'GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png', 19),
-  FondIgn('Photos aériennes', 'ORTHOIMAGERY.ORTHOPHOTOS', 'image/jpeg', 19),
-];
 
 class CarteScreen extends StatefulWidget {
   /// Appelé après un effacement d'urgence : retour à l'écran d'accueil.
@@ -355,6 +334,8 @@ class _CarteScreenState extends State<CarteScreen> {
     await _suivi?.cancel();
     _suivi = null;
     await _partage.toutEffacer();
+    await enregistrement.arreter();
+    await effacerExercices();
     await effacerCartes();
     await changerModeNuit(false);
     if (!mounted) return;
@@ -1223,9 +1204,11 @@ class _CarteScreenState extends State<CarteScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Text(
-              attente == 0
-                  ? texte
-                  : '$texte\n$attente envoi(s) en attente de réseau',
+              [
+                if (enregistrement.actif) '● Enregistrement en cours',
+                texte,
+                if (attente > 0) '$attente envoi(s) en attente de réseau',
+              ].join('\n'),
               style: const TextStyle(color: Colors.white, fontSize: 12)),
         ),
       ),

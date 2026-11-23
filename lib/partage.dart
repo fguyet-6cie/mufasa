@@ -10,6 +10,7 @@ import 'cot.dart';
 import 'dessins.dart';
 import 'hierarchie.dart';
 import 'reglages.dart';
+import 'rejeu/enregistrement.dart';
 import 'reseau/liaison.dart';
 
 class Partage extends ChangeNotifier {
@@ -178,7 +179,7 @@ class Partage extends ChangeNotifier {
     _dernierEnvoi = DateTime.now();
     _latEnvoyee = _lat;
     _lonEnvoyee = _lon;
-    _liaison!.envoyer(CotEvenement.maPosition(
+    final moi = CotEvenement.maPosition(
       uid: r.uid,
       indicatif: r.indicatif,
       lat: _lat!,
@@ -186,13 +187,16 @@ class Partage extends ChangeNotifier {
       precision: _precision,
       batterie: batterie,
       place: r.place,
-    ).versXml());
+    );
+    enregistrement.position(moi);
+    _liaison!.envoyer(moi.versXml());
   }
 
   @visibleForTesting
   void recevoir(String xml) {
     final suppr = Dessin.lireSuppression(xml);
     if (suppr != null) {
+      if (!_supprimes.contains(suppr)) enregistrement.suppression(suppr);
       _oublierDessin(suppr);
       return;
     }
@@ -210,6 +214,7 @@ class Partage extends ChangeNotifier {
         _nouveauxEnnemis.add(d);
       }
       if (connu == null || !connu.heure.isAfter(d.heure)) {
+        if (connu == null || connu.heure != d.heure) enregistrement.dessin(xml);
         dessins[d.uid] = d;
         _enregistrerDessins();
         notifyListeners();
@@ -221,6 +226,7 @@ class Partage extends ChangeNotifier {
     // On ne garde ici que les unités (types « a-… »), pas les autres objets.
     if (!ev.type.startsWith('a-')) return;
     camarades[ev.uid] = ev;
+    enregistrement.position(ev);
     notifyListeners();
   }
 
@@ -268,6 +274,7 @@ class Partage extends ChangeNotifier {
   // ----- Dessins -----
 
   void ajouterDessin(Dessin d) {
+    enregistrement.dessin(d.versXml());
     dessins[d.uid] = d;
     _enregistrerDessins();
     _envoyerDessin(d.uid, d.versXml());
@@ -275,6 +282,7 @@ class Partage extends ChangeNotifier {
   }
 
   void supprimerDessin(String uid) {
+    enregistrement.suppression(uid);
     _oublierDessin(uid);
     _envoyerDessin(uid, Dessin.suppressionXml(uid, _reglages?.uid ?? ''));
   }
