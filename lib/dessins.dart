@@ -24,11 +24,30 @@ const rubriquesEnnemi = <String, String>{
   'volume': 'Volume',
   'nature': 'Nature',
   'attitude': 'Attitude',
+  'cap': 'Se dirige vers',
   'direction': 'Direction / déplacement',
   'materiels': 'Matériels / armement',
   'remarques': 'Remarques',
   'heure': 'Vu à',
   'observateur': 'Signalé par',
+};
+
+/// Directions possibles d'un ennemi en mouvement, en degrés (0 = nord).
+const capsEnnemi = <String, int>{
+  'NO': 315, 'N': 0, 'NE': 45, //
+  'O': 270, 'E': 90, //
+  'SO': 225, 'S': 180, 'SE': 135,
+};
+
+const nomsCaps = {
+  'N': 'le nord',
+  'NE': 'le nord-est',
+  'E': 'l\'est',
+  'SE': 'le sud-est',
+  'S': 'le sud',
+  'SO': 'le sud-ouest',
+  'O': 'l\'ouest',
+  'NO': 'le nord-ouest',
 };
 
 /// Type CoT d'un ordre de suppression.

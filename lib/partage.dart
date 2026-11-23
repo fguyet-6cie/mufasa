@@ -214,6 +214,20 @@ class Partage extends ChangeNotifier {
     }
   }
 
+  /// Effacement d'urgence : coupe le partage et efface tout ce que Mufasa
+  /// a gardé dans ce téléphone (dessins, réglages, code de groupe…).
+  Future<void> toutEffacer() async {
+    await arreter();
+    _reglages = null;
+    _lat = _lon = _precision = null;
+    dessins.clear();
+    _supprimes.clear();
+    camarades.clear();
+    final p = await SharedPreferences.getInstance();
+    await p.clear();
+    notifyListeners();
+  }
+
   /// Recharge les dessins gardés dans le téléphone.
   Future<void> chargerDessins() async {
     final p = await SharedPreferences.getInstance();

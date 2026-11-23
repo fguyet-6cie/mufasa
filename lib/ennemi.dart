@@ -1,6 +1,8 @@
 // Désignation d'un ennemi : la fiche que remplit celui qui l'a vu.
 import 'package:flutter/material.dart';
 
+import 'dessins.dart';
+
 const naturesEnnemi = [
   'Infanterie',
   'Blindé',
@@ -49,6 +51,7 @@ class _FicheEnnemiEtat extends State<_FicheEnnemi> {
   final _remarques = TextEditingController();
   String _nature = 'Inconnu';
   String _attitude = 'Inconnue';
+  String? _cap;
 
   @override
   void dispose() {
@@ -81,11 +84,73 @@ class _FicheEnnemiEtat extends State<_FicheEnnemi> {
         ],
       );
 
+  /// Rose des vents : vers où se dirige l'ennemi.
+  Widget _boussole() {
+    const grille = [
+      ['NO', 'N', 'NE'],
+      ['O', '', 'E'],
+      ['SO', 'S', 'SE'],
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text('Il se dirige vers…',
+            style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Center(
+          child: Column(children: [
+            for (final ligne in grille)
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                for (final c in ligne)
+                  Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: SizedBox(
+                      width: 64,
+                      height: 48,
+                      child: c.isEmpty
+                          ? const Icon(Icons.warning_amber, color: Colors.red)
+                          : (c == _cap
+                              ? FilledButton(
+                                  style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.red.shade700,
+                                      padding: EdgeInsets.zero),
+                                  onPressed: () => setState(() => _cap = null),
+                                  child: _fleche(c, Colors.white),
+                                )
+                              : OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                      padding: EdgeInsets.zero),
+                                  onPressed: () => setState(() => _cap = c),
+                                  child: _fleche(c, Colors.red.shade700),
+                                )),
+                    ),
+                  ),
+              ]),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  Widget _fleche(String cap, Color couleur) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Transform.rotate(
+            angle: capsEnnemi[cap]! * 3.14159265 / 180,
+            child: Icon(Icons.arrow_upward, size: 18, color: couleur),
+          ),
+          Text(cap,
+              style: TextStyle(color: couleur, fontWeight: FontWeight.bold)),
+        ],
+      );
+
   void _envoyer() {
     Navigator.pop(context, {
       'volume': _volume.text.trim(),
       'nature': _nature,
       'attitude': _attitude,
+      if (_attitude == 'En mouvement' && _cap != null) 'cap': _cap!,
       'direction': _direction.text.trim(),
       'materiels': _materiels.text.trim(),
       'remarques': _remarques.text.trim(),
@@ -114,6 +179,7 @@ class _FicheEnnemiEtat extends State<_FicheEnnemi> {
               (v) => setState(() => _nature = v)),
           _choix('Attitude', attitudesEnnemi, _attitude,
               (v) => setState(() => _attitude = v)),
+          if (_attitude == 'En mouvement') _boussole(),
           TextField(
             controller: _direction,
             decoration: const InputDecoration(

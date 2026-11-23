@@ -51,7 +51,7 @@ class _MufasaAppState extends State<MufasaApp> {
         duration: const Duration(milliseconds: 400),
         child: _accueil
             ? AccueilScreen(onEntrer: () => setState(() => _accueil = false))
-            : const CarteScreen(),
+            : CarteScreen(onEfface: () => setState(() => _accueil = true)),
       ),
     );
   }
@@ -76,7 +76,9 @@ const fondsIgn = [
 ];
 
 class CarteScreen extends StatefulWidget {
-  const CarteScreen({super.key});
+  /// Appelé après un effacement d'urgence : retour à l'écran d'accueil.
+  final VoidCallback? onEfface;
+  const CarteScreen({super.key, this.onEfface});
 
   @override
   State<CarteScreen> createState() => _CarteScreenState();
@@ -177,6 +179,42 @@ class _CarteScreenState extends State<CarteScreen> {
     } else {
       _demarrerGeoloc();
     }
+  }
+
+  // ----- Effacement d'urgence -----
+
+  Future<void> _effacementUrgence() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.delete_forever, size: 44, color: Colors.red.shade700),
+        title: const Text('Effacement d\'urgence'),
+        content: const Text('Tout effacer de ce téléphone ?\n\n'
+            '• positions, ennemis, points et dessins reçus ;\n'
+            '• réglages, code de groupe et accès au réseau.\n\n'
+            'Le partage s\'arrête aussitôt. Les autres téléphones ne sont '
+            'pas touchés. Impossible d\'annuler.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.delete_forever),
+            label: const Text('TOUT EFFACER'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _suivi?.cancel();
+    _suivi = null;
+    await _partage.toutEffacer();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Toutes les données de Mufasa ont été effacées.')));
+    widget.onEfface?.call();
   }
 
   // ----- Dessin -----
@@ -452,6 +490,11 @@ class _CarteScreenState extends State<CarteScreen> {
           ]),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_forever),
+            tooltip: 'Effacement d\'urgence',
+            onPressed: _effacementUrgence,
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Réglages',

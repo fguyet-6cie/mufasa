@@ -120,4 +120,18 @@ void main() {
     expect(p.camarades, isEmpty); // pas pris pour un camarade
     expect(p.dessins.keys, ['E1']);
   });
+
+  test('l\'effacement d\'urgence vide tout le téléphone', () async {
+    SharedPreferences.setMockInitialValues({'codeGroupe': 'SECRET'});
+    final p = Partage()..ajouterDessin(exemple('D1'));
+    p.recevoir(exemple('D2').versXml());
+    await Future.delayed(const Duration(milliseconds: 50));
+    await p.toutEffacer();
+    expect(p.dessins, isEmpty);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getKeys(), isEmpty);
+    final q = Partage();
+    await q.chargerDessins();
+    expect(q.dessins, isEmpty);
+  });
 }

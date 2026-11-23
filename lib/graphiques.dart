@@ -119,6 +119,8 @@ class _Peintre extends CustomPainter {
           _etiquette(canvas, haut + const Offset(0, -14), d.nom, d.couleur);
         case FormeDessin.ennemi:
           final p = pts.first;
+          final cap = capsEnnemi[d.fiche['cap']];
+          if (cap != null) _flecheEnnemi(canvas, p, cap);
           canvas.drawCircle(p, 11, Paint()..color = Colors.white);
           canvas.drawCircle(p, 8.5, Paint()..color = Colors.red.shade700);
           final resume = [d.fiche['volume'], d.fiche['nature']]
@@ -164,6 +166,34 @@ class _Peintre extends CustomPainter {
       reste -= longueurs[i];
     }
     return pts.last;
+  }
+
+  /// Flèche rouge partant du point ennemi, vers la direction où il va.
+  void _flecheEnnemi(Canvas canvas, Offset p, int cap) {
+    final a = cap * math.pi / 180;
+    final u = Offset(math.sin(a), -math.cos(a));
+    final n = Offset(-u.dy, u.dx);
+    final debut = p + u * 13, bout = p + u * 46;
+    final base = bout - u * 14;
+    final tete = Path()
+      ..moveTo(bout.dx, bout.dy)
+      ..lineTo((base + n * 9).dx, (base + n * 9).dy)
+      ..lineTo((base - n * 9).dx, (base - n * 9).dy)
+      ..close();
+    final contour = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawLine(debut, base, contour);
+    canvas.drawPath(tete, contour);
+    final rouge = Paint()
+      ..color = Colors.red.shade700
+      ..strokeWidth = 4.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(debut, base, rouge);
+    canvas.drawPath(tete, Paint()..color = Colors.red.shade700);
   }
 
   void _point(Canvas canvas, Offset p, Color couleur) {

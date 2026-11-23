@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'dessins.dart';
+import 'mgrs.dart';
 
 /// Choix de ce que l'on veut poser sur la carte.
 Future<FormeDessin?> choisirOutil(BuildContext context) {
@@ -158,9 +159,23 @@ Future<ActionDessin?> ficheDessin(BuildContext context, Dessin d) {
             if (d.forme == FormeDessin.ennemi)
               for (final r in rubriquesEnnemi.entries)
                 if ((d.fiche[r.key] ?? '').isNotEmpty)
-                  rubrique(r.value, d.fiche[r.key]!),
+                  rubrique(
+                      r.value,
+                      r.key == 'cap'
+                          ? nomsCaps[d.fiche['cap']] ?? d.fiche['cap']!
+                          : d.fiche[r.key]!),
             if (d.observations.isNotEmpty)
               rubrique('Observations', d.observations),
+            if (d.forme != FormeDessin.ligne &&
+                versMgrs(d.centre.latitude, d.centre.longitude).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: SelectableText(
+                  'MGRS : ${versMgrs(d.centre.latitude, d.centre.longitude)}',
+                  style: const TextStyle(
+                      fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                ),
+              ),
             const SizedBox(height: 8),
             Text(
                 'Par ${d.auteurIndicatif.isEmpty ? 'inconnu' : d.auteurIndicatif}, à $hh'),
