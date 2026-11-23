@@ -35,4 +35,26 @@ void main() {
     expect(lu.codeGroupe, 'Lion Rouge 2026');
     expect(Invitation.decoder('bonjour'), isNull);
   });
+
+  test('le code PIN administrateur voyage dans l\'invitation', () async {
+    final e = await empreintePin('1234');
+    expect(e, await empreintePin(' 1234 '));
+    expect(e, isNot(await empreintePin('1235')));
+    expect(e, isNot(contains('1234')));
+    final inv = Invitation(
+        hote: 'h',
+        port: 8883,
+        identifiant: 'i',
+        motDePasse: 'm',
+        codeGroupe: 'g',
+        admin: e);
+    expect(Invitation.decoder(inv.encoder())!.admin, e);
+    const sansPin = Invitation(
+        hote: 'h',
+        port: 8883,
+        identifiant: 'i',
+        motDePasse: 'm',
+        codeGroupe: 'g');
+    expect(Invitation.decoder(sansPin.encoder())!.admin, '');
+  });
 }

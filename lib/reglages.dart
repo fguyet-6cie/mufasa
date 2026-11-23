@@ -2,14 +2,21 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'hierarchie.dart';
 
-/// Tout ce qu'il faut pour rejoindre un groupe en 4G/5G, en un seul texte à
-/// envoyer par messagerie : « MUFASA1:… ».
+/// Empreinte du code PIN administrateur (on ne garde jamais le code lui-même).
+Future<String> empreintePin(String pin) async {
+  final h = await Sha256().hash(utf8.encode('MUFASA-admin:${pin.trim()}'));
+  return base64Url.encode(h.bytes);
+}
+
+/// Tout ce qu'il faut pour rejoindre la compagnie en 4G/5G, en un seul texte
+/// à envoyer par messagerie : « MUFASA1:… ».
 class Invitation {
   final String hote;
   final int port;
@@ -17,12 +24,16 @@ class Invitation {
   final String motDePasse;
   final String codeGroupe;
 
+  /// Empreinte du code PIN administrateur (vide s'il n'y en a pas).
+  final String admin;
+
   const Invitation({
     required this.hote,
     required this.port,
     required this.identifiant,
     required this.motDePasse,
     required this.codeGroupe,
+    this.admin = '',
   });
 
   static const prefixe = 'MUFASA1:';
@@ -35,6 +46,7 @@ class Invitation {
         'i': identifiant,
         'm': motDePasse,
         'g': codeGroupe,
+        if (admin.isNotEmpty) 'a': admin,
       })));
 
   static Invitation? decoder(String texte) {
@@ -53,6 +65,7 @@ class Invitation {
         identifiant: j['i'] as String,
         motDePasse: j['m'] as String,
         codeGroupe: j['g'] as String,
+        admin: j['a'] as String? ?? '',
       );
     } catch (_) {
       return null;
@@ -69,6 +82,9 @@ class Reglages {
   String relaisIdentifiant;
   String relaisMotDePasse;
   String codeGroupe;
+
+  /// Empreinte du code PIN administrateur ('' = pas encore créé).
+  String pinAdmin;
   // Place dans la compagnie
   Fonction fonction;
   int section, groupe, numEquipe;
@@ -100,6 +116,7 @@ class Reglages {
     required this.relaisIdentifiant,
     required this.relaisMotDePasse,
     required this.codeGroupe,
+    this.pinAdmin = '',
   });
 
   bool get relaisComplet =>
@@ -114,6 +131,7 @@ class Reglages {
         identifiant: relaisIdentifiant,
         motDePasse: relaisMotDePasse,
         codeGroupe: codeGroupe,
+        admin: pinAdmin,
       );
 
   static Future<Reglages> charger() async {
@@ -133,6 +151,7 @@ class Reglages {
       relaisIdentifiant: p.getString('relaisIdentifiant') ?? '',
       relaisMotDePasse: p.getString('relaisMotDePasse') ?? '',
       codeGroupe: p.getString('codeGroupe') ?? '',
+      pinAdmin: p.getString('pinAdmin') ?? '',
       fonction: Fonction.values
               .where((f) => f.name == p.getString('fonction'))
               .firstOrNull ??
@@ -157,6 +176,7 @@ class Reglages {
     await p.setString('relaisIdentifiant', relaisIdentifiant);
     await p.setString('relaisMotDePasse', relaisMotDePasse);
     await p.setString('codeGroupe', codeGroupe);
+    await p.setString('pinAdmin', pinAdmin);
     await p.setString('fonction', fonction.name);
     await p.setInt('section', section);
     await p.setInt('groupe', groupe);
@@ -187,6 +207,10 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
   late Fonction _fonction = r.fonction;
   late int _section = r.section, _groupe = r.groupe, _equipeNum = r.numEquipe;
   bool _voirAcces = false;
+
+  /// Mode administrateur : seul moyen de voir et changer l'accès au partage.
+  bool _admin = false;
+  late String _pin = r.pinAdmin;
 
   @override
   void dispose() {
@@ -219,6 +243,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       _relaisId.text = inv.identifiant;
       _relaisMdp.text = inv.motDePasse;
       _code.text = inv.codeGroupe;
+      if (inv.admin.isNotEmpty) _pin = inv.admin;
     });
     _info('Invitation reçue. Appuie sur Enregistrer.');
   }
@@ -230,11 +255,102 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       identifiant: _relaisId.text.trim(),
       motDePasse: _relaisMdp.text,
       codeGroupe: _code.text.trim(),
+      admin: _pin,
     );
     await Clipboard.setData(ClipboardData(
         text: 'Rejoins MUFASA : ouvre MUFASA > Réglages > '
             '« Coller une invitation ».\n${inv.encoder()}'));
     _info('Invitation copiée. Envoie-la par messagerie à ta compagnie.');
+  }
+
+  Widget _etatAcces() {
+    final pret = _relaisHote.text.trim().isNotEmpty &&
+        _relaisId.text.trim().isNotEmpty &&
+        _relaisMdp.text.isNotEmpty &&
+        _code.text.trim().isNotEmpty;
+    return Row(children: [
+      Icon(pret ? Icons.check_circle : Icons.info_outline,
+          color: pret ? Colors.green.shade700 : Colors.orange.shade800),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(pret
+            ? 'Compagnie configurée'
+            : 'Pas encore configuré : colle l\'invitation reçue par messagerie.'),
+      ),
+    ]);
+  }
+
+  /// Ouvre le mode administrateur : crée le code PIN la première fois,
+  /// sinon le demande.
+  Future<void> _ouvrirAdmin() async {
+    final creation = _pin.isEmpty;
+    final pin1 = TextEditingController(), pin2 = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.admin_panel_settings_outlined, size: 36),
+        title: Text(creation
+            ? 'Créer le code PIN administrateur'
+            : 'Code PIN administrateur'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (creation)
+            const Text('Ce code protège l\'accès au partage. Il sera '
+                'demandé sur tous les téléphones qui reçoivent ton '
+                'invitation. Garde-le pour toi.'),
+          TextField(
+            controller: pin1,
+            autofocus: true,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+                labelText: 'Code PIN (4 chiffres ou plus)'),
+          ),
+          if (creation)
+            TextField(
+              controller: pin2,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration:
+                  const InputDecoration(labelText: 'Confirme le code PIN'),
+            ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Valider')),
+        ],
+      ),
+    );
+    final pin = pin1.text.trim();
+    final confirmation = pin2.text.trim();
+    pin1.dispose();
+    pin2.dispose();
+    if (ok != true || !mounted) return;
+    if (creation) {
+      if (pin.length < 4) {
+        _info('Le code PIN doit faire au moins 4 chiffres.');
+        return;
+      }
+      if (pin != confirmation) {
+        _info('Les deux codes PIN ne sont pas identiques.');
+        return;
+      }
+      final e = await empreintePin(pin);
+      setState(() {
+        _pin = e;
+        _admin = true;
+      });
+      _info('Code PIN créé. Pense à appuyer sur Enregistrer.');
+      return;
+    }
+    if (await empreintePin(pin) == _pin) {
+      setState(() => _admin = true);
+    } else {
+      _info('Code PIN incorrect.');
+    }
   }
 
   Future<void> _valider() async {
@@ -246,6 +362,7 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
       ..relaisIdentifiant = _relaisId.text.trim()
       ..relaisMotDePasse = _relaisMdp.text
       ..codeGroupe = _code.text.trim()
+      ..pinAdmin = _pin
       ..fonction = _fonction
       ..section = _section
       ..groupe = _groupe
@@ -307,13 +424,34 @@ class _ReglagesScreenState extends State<ReglagesScreen> {
           ]),
           const SizedBox(height: 24),
           Text('Accès au partage', style: titre),
-          ...[
+          const SizedBox(height: 8),
+          _etatAcces(),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _collerInvitation,
+            icon: const Icon(Icons.content_paste),
+            label: const Text('Coller une invitation'),
+          ),
+          if (!_admin)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _ouvrirAdmin,
+                icon: const Icon(Icons.lock_outline, size: 18),
+                label: const Text('Mode administrateur'),
+              ),
+            )
+          else ...[
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _collerInvitation,
-              icon: const Icon(Icons.content_paste),
-              label: const Text('Coller une invitation'),
-            ),
+            Row(children: [
+              const Icon(Icons.lock_open, size: 18),
+              const SizedBox(width: 6),
+              const Expanded(child: Text('Mode administrateur')),
+              TextButton(
+                onPressed: () => setState(() => _admin = false),
+                child: const Text('Quitter'),
+              ),
+            ]),
             TextField(
               controller: _code,
               decoration: const InputDecoration(
